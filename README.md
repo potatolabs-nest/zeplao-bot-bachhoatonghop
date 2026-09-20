@@ -1,7 +1,7 @@
 # bachhoabot
 
 Một con bot chụp ảnh trang web trong nhóm chat Cúc Cu. Ai dán một cái link, nó mở trang ấy bằng
-Chrome thật ở khổ màn hình máy tính, cuộn xuống hai màn hình, chụp lại, rồi gửi tấm ảnh lên nhóm.
+Chrome thật ở khổ màn hình máy tính, cuộn xuống bốn màn hình, chụp lại, rồi gửi tấm ảnh lên nhóm.
 
 Chỉ tấm ảnh. Không có dòng chữ nào dưới nó, không có lời chào lúc được thêm vào nhóm, không một
 câu nào bot không được hỏi.
@@ -22,7 +22,7 @@ Hai thứ này không thay nhau. Chúng nằm cạnh nhau trong cùng một tin 
 | Gõ | Được gì |
 | --- | --- |
 | Dán một cái link vào nhóm | Bot chụp, không cần gõ gì thêm — **cần tắt chế độ riêng tư**, xem dưới |
-| `/anh https://…` | Chụp hai màn hình đầu, cả nhóm thấy |
+| `/anh https://…` | Chụp bốn màn hình đầu, cả nhóm thấy |
 | `!anh https://…` | Như trên, chỉ người gõ thấy |
 | `/anh dai https://…` | Chụp cả trang dài, không chỉ màn hình đầu |
 | `@bachhoabot https://…` | Gọi tên, nếu ai quen lối ấy |
@@ -40,22 +40,59 @@ chuyển tiếp, dán nhầm hai lần — và ba tấm ảnh giống hệt nhau
 
 ## Chụp bao nhiêu
 
-Hai màn hình — 1280×1600 — chứ không phải một.
+Bốn màn hình — 1280×3200 — và **không bao giờ hơn**.
 
 Một màn hình đầu của gần như mọi trang bây giờ là logo, thanh điều hướng, một cái banner nhận
 cookie và đúng một cái tiêu đề: ảnh chụp ra thứ ai cũng đoán được, còn cái người ta dán link để
-khoe thì nằm ngay dưới mép. Cũng không nhiều hơn hai, vì đây là ảnh trong khung chat — cao gấp
-ba là chữ nhỏ tới mức không đọc nổi trên điện thoại, và là một tấm ảnh chiếm cả màn hình người
-khác. Ai cần cả trang thì gõ `/anh dai`, cắt ở 4000px.
+khoe thì nằm dưới mép.
 
-Và phải **cuộn thật** trước khi chụp, từng nấc một màn hình rồi mới về đầu trang. Ảnh trên gần
-như mọi trang bây giờ chỉ tải khi trôi vào tầm mắt, mà "tầm mắt" của trang là chỗ nó tưởng người
-ta đang nhìn — không phải vùng bot sắp chụp. Không cuộn thì nửa dưới tấm ảnh là một dãy ô xám.
-Nhảy thẳng xuống đáy cũng không được: trang nghe sự kiện cuộn để quyết định tải ảnh nào, và một
-cú nhảy từ 0 xuống 4000 thì mọi thứ ở giữa không bao giờ đi qua tầm mắt.
+Cái trần cứng ở bốn thì không phải chuyện gu. Rất nhiều trang **tự nạp thêm khi cuộn xuống**:
+không có trần thì bot cuộn, trang dài ra, bot cuộn tiếp, và tấm ảnh lớn lên tới khi nào trang ấy
+hết bài — tức là không bao giờ. Trang ngắn hơn bốn màn hình thì chụp đúng nó, không đệm thêm
+khoảng trắng: nửa dưới trắng trơn trông y như trang bị lỗi. Ai cần cả trang thì gõ `/anh dai`,
+cắt ở 8000px.
 
-Trang ngắn hơn hai màn hình thì chụp đúng nó, không đệm thêm khoảng trắng: một tấm ảnh có nửa
-dưới trắng trơn trông y như trang bị lỗi.
+### Cuộn chậm, và đợi ở đáy
+
+Ảnh trên gần như mọi trang bây giờ chỉ tải khi trôi qua tầm mắt, mà "tầm mắt" của trang là chỗ
+nó tưởng người ta đang nhìn — không phải vùng bot sắp chụp. Nên phải cuộn thật. Nhưng cuộn thế
+nào thì quyết định được bao nhiêu:
+
+| Cách cuộn qua bốn màn hình `theguardian.com` | Ảnh tải xong |
+| --- | --- |
+| Một khung một nấc, dừng 150ms | **8** trên 112 |
+| Nửa khung một nấc, dừng 250ms, đợi ở đáy | **22** trên 112 |
+
+Lần đầu làm sai đúng kiểu khó thấy nhất: ảnh chụp ra bố cục đầy đủ, chữ đủ cả, mà **mọi ô ảnh
+đều trắng** — 286 KB thay vì 880. Nhìn từ log thì đó là một lần chụp thành công, chỉ nhẹ bất
+thường.
+
+Và phải đợi **ở đáy** rồi mới quay lên đầu trang, chứ không quay lên rồi mới đợi: cuộn là một
+lần *gọi* ảnh, ảnh về tới nơi thì muộn hơn nửa giây. Về sớm là hỏi xong rồi bỏ đi trước khi nghe
+trả lời.
+
+### Dọn lớp che
+
+Banner "chấp nhận cookie" dính đáy màn hình là thứ hỏng nặng nhất với một tấm ảnh bốn màn hình:
+nó nằm nguyên ở đáy khung chụp và ăn mất cả một dải ngang. Trang nào khoá cuộn sau cái banner ấy
+thì ảnh chỉ còn mỗi nó.
+
+Cách hiển nhiên là chụp 80% mỗi màn hình rồi ghép — nhưng thế là bỏ đi 640px nội dung **thật**
+trên bốn màn hình, mỗi lần chụp, kể cả những trang chẳng có banner nào; mà banner cao hơn 20%
+thì vẫn lọt vào. Chữa cái nhìn thấy chứ không chữa cái gây ra.
+
+Nên dọn thẳng: mọi thứ `position: fixed` mà **dính đáy và rộng quá nửa khung**, hoặc **phủ quá
+60% ngang và 50% dọc**, đều bị ẩn. Hai luật ấy bắt banner cookie, lớp phủ mờ, hộp thoại đăng ký
+nhận tin — còn thanh điều hướng dính đỉnh thì giữ, vì nó là một phần của trang và trong ảnh nó
+chỉ hiện một lần ở trên cùng. Dọn hai lần, vì rất nhiều banner chỉ hiện ra **sau khi** cuộn. Và
+mở lại `overflow` của `body`, không thì phần dưới không bao giờ cuộn tới được.
+
+`sticky` từng nằm trong luật ấy, và nó dọn nhầm ngay: `theguardian.com` gói nội dung trong những
+khối `sticky` rộng cả trang, nên luật "phủ nhiều" ăn luôn cả khối ảnh. Giờ chỉ `fixed`. Một
+banner sót lại thì chỉ xấu; xoá nhầm nội dung thì là nói dối về trang ấy.
+
+**Ẩn chứ không bấm "Đồng ý".** Bấm hộ người khác một nút đồng ý là quyết định thay họ một chuyện
+không phải của mình — mà nút ấy mỗi trang một chữ, mỗi nước một luật.
 
 ## Câu trả lời là tấm ảnh, và chỉ tấm ảnh
 
@@ -133,7 +170,7 @@ Có thế rồi thì ba đường về đích, cái nào tới trước thì ch�
 | | |
 | --- | --- |
 | **Mạng lặng** 700ms | Gần hết các trang đi đường này |
-| **Đã có nội dung** rồi chờ thêm 3 giây | Cho trang không bao giờ lặng — `github.com` |
+| **Đã có nội dung** rồi chờ thêm 1,5 giây | Cho trang không bao giờ lặng — `github.com` |
 | **Hết 15 giây** | Cho trang không bao giờ xong |
 
 Và một đường về không ai muốn: trang **vẫn trống** sau 5 giây mà mạng đã lặng thì chụp một trang
@@ -185,16 +222,36 @@ trang là hàng trăm request, và mỗi lần nhường lượt cho vòng lặp
 Ngoài ra, mỗi lần chụp là một **hồ sơ trình duyệt riêng**: hai người lạ gửi hai cái link không
 dùng chung cookie, localStorage hay cache.
 
-## Ảnh, và trần 2 MB
+## Ảnh, và cỡ ảnh
 
-Ảnh hai màn hình của một trang báo nặng chừng 0,9–1,3 MB. Nền tảng nhận nhiều nhất 2 MB một ảnh,
-và chỉ nhận PNG hoặc SVG — không có đường JPEG để nén cho
-nhỏ. Thứ đổi được là số điểm ảnh, nên bot chụp rồi cân, quá trần thì thu nhỏ dần: 1 → 0,8 → 0,65
-→ 0,5 → 0,4. Thu dần chứ không thu thẳng xuống đáy, vì gần hết các trang vừa ngay từ lần đầu và
-một ảnh 1280 đọc được chữ thì hơn hẳn một ảnh 640 chắc chắn vừa.
+Nền tảng nhận nhiều nhất 2 MB một ảnh. Nhưng 2 MB là **quá nặng cho một tin nhắn**: người ta
+đang ngồi 4G trong quán, và một tấm ảnh bot tự gửi vào giữa cuộc nói chuyện thì không ai chọn
+tải nó cả. Nên bot nhắm **900 KB**, không nhắm cái trần.
 
-`/anh dai` chụp cả trang, cắt ở 4000px. Dài hơn thì thành một tấm ảnh không ai đọc nổi trong
-khung chat, và gần như chắc chắn vượt trần.
+Không có đường nén nào khác ngoài giảm điểm ảnh. Nền tảng chỉ nhận PNG với SVG — không JPEG — và
+SVG bọc một tấm JPEG cũng bị chặn có chủ ý: `href="data:"` nằm trong regex `UnsafeSvg` của
+`BotApi.cs`. Nên "nén" ở đây là thu nhỏ.
+
+Thu bao nhiêu thì **đoán, chứ không dò từng nấc**. Số byte của một tấm PNG đi gần như tuyến tính
+theo số điểm ảnh, mà số điểm ảnh đi theo bình phương tỉ lệ — nên tỉ lệ cần là căn bậc hai của tỉ
+lệ byte, và một lần đoán thường trúng. Dò 1 → 0,8 → 0,65 → 0,5 là bốn lần chụp, mỗi lần gần một
+giây trên một trang bốn màn hình, để tới đúng chỗ mà phép nhân cho ngay.
+
+Trang chữ không bị đụng tới: nó nhẹ sẵn và giữ nguyên 1280px. Trang ảnh mới phải thu — và đó
+cũng đúng là loại trang mà thu nhỏ ít mất mát nhất. Đo bốn màn hình:
+
+| | Cỡ | Tỉ lệ |
+| --- | --- | --- |
+| `example.com` | 17 KB | 1,00 |
+| `news.ycombinator.com` | 268 KB | 1,00 |
+| `kuku.vn/bot/doc` | 556 KB | 1,00 |
+| `theguardian.com` | 882 KB | 1,00 |
+| `vnexpress.net` | 901 KB | 0,56 |
+| `24h.com.vn` | 909 KB | 0,57 |
+| `bbc.com/news` | 916 KB | 0,58 |
+
+Sàn là 0,5: dưới nữa thì chữ trên ảnh không còn đọc được, mà một tấm ảnh nhẹ không đọc được thì
+nhẹ để làm gì.
 
 Mỗi tin nhắn kèm một `clientMessageId` dựng từ id tin nhắn và địa chỉ, nên gửi lại sau một cú 429
 hay một lần mạng đứt không làm ra tấm ảnh thứ hai trong phòng.
@@ -259,8 +316,10 @@ hoặc `CHROME_URL` trỏ vào một cái ở chỗ khác. Không cần `npm ins
 | `ZEPLAO_BOT_API` | Nền tảng bot. Mặc định `https://api-bot.kuku.vn` |
 | `BACHHOA_STATE` | File nhớ đã đọc tới đâu. Mặc định `data/state.json` |
 | `SHOT_WIDTH`, `SHOT_HEIGHT` | Khổ màn hình. Mặc định 1280×800 |
-| `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 2 |
-| `SHOT_QUIET_MS`, `SHOT_PAINTED_MS`, `SHOT_BLANK_MS`, `SHOT_LOAD_MS` | Bốn cái mốc ở mục "Chụp lúc nào" (700 · 3000 · 5000 · 15000) |
+| `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 4 |
+| `SHOT_AIM_BYTES`, `SHOT_LEAST_SCALE` | Cỡ ảnh nhắm tới (900 KB) và tỉ lệ thu nhỏ nhất (0,5) |
+| `SHOT_DWELL_MS`, `SHOT_SCROLLED_MS` | Dừng ở mỗi nấc cuộn (250ms), đợi ảnh về ở đáy (6s) |
+| `SHOT_QUIET_MS`, `SHOT_PAINTED_MS`, `SHOT_BLANK_MS`, `SHOT_LOAD_MS` | Bốn cái mốc ở mục "Chụp lúc nào" (700 · 1500 · 5000 · 15000) |
 | `BACHHOA_ORDERS`, `BACHHOA_WAITING` | Chụp mấy trang một lúc (2), hàng đợi dài nhất (12) |
 | `BACHHOA_SAME_MS` | Cùng link cùng phòng thì bao lâu mới chụp lại. Mặc định 10 phút |
 

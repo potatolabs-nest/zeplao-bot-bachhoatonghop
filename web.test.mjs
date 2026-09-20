@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { hextetsOf, isPrivateAddress, linksIn, vetHost, vetUrl } from './web/links.mjs';
-import { endpointFor, untilReady } from './web/shot.mjs';
+import { endpointFor, untilReady, untilStill } from './web/shot.mjs';
 import { fileName, hostOf, madeRecently, refusal } from './web/message.mjs';
 
 // ---- tìm link ------------------------------------------------------------------------------
@@ -197,6 +197,21 @@ test('trang không bao giờ xong và không bao giờ vẽ thì cũng có lúc 
   const tick = clock((at) => { marks.beat = at; });
   assert.equal(await untilReady(marks, { ...tick, loadMs: 15000 }), 'het-gio');
   assert.equal(tick.at, 15000);
+});
+
+test('cuộn xong thì đợi ảnh vừa gọi kịp về', async () => {
+  // Chụp ngay sau khi cuộn ra một trang bố cục đầy đủ mà mọi ô ảnh đều trắng.
+  const marks = { beat: 0 };
+  const tick = clock((at) => { if (at < 2000) marks.beat = at; });
+  assert.equal(await untilStill(marks, { ...tick, mostMs: 6000 }), 'lang');
+  assert.ok(tick.at >= 2000, `chụp lúc ảnh chưa về, ở ${tick.at}ms`);
+});
+
+test('trang bận mãi thì cũng thôi, không đợi hết đời', async () => {
+  const marks = { beat: 0 };
+  const tick = clock((at) => { marks.beat = at; });
+  assert.equal(await untilStill(marks, { ...tick, mostMs: 6000 }), 'het-gio');
+  assert.equal(tick.at, 6000);
 });
 
 // ---- nối vào Chrome có sẵn -------------------------------------------------------------------

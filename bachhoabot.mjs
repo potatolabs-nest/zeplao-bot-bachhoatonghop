@@ -337,7 +337,7 @@ async function run(token) {
       return sorry(message, asked, `Không chụp được ${new URL(vetted.url).hostname}: ${problem.message}.`);
     }
 
-    console.log(`${vetted.url} -> ${Math.round(made.png.byteLength / 1024)}KB, ${Date.now() - began}ms · ${made.title}`);
+    console.log(`${vetted.url} -> ${Math.round(made.png.byteLength / 1024)}KB, ${made.height}px, tỉ lệ ${made.scale.toFixed(2)}, ${Date.now() - began}ms · ${made.title}`);
     // **Không có `text`.** Câu trả lời là tấm ảnh, và một dòng chữ dưới nó chỉ nói lại thứ trong
     // ảnh đã có. Máy chủ không bắt buộc `text` khi có ảnh (`RefusedAsWritten` chỉ xét độ dài và
     // bàn phím), dù tài liệu viết "required unless stickerId" — dòng ấy nói về tin nhắn chữ.

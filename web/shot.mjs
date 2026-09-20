@@ -53,10 +53,13 @@ export const LEAST_MS = Number(process.env.SHOT_LEAST_MS ?? 600);
  * ngồi hết trần 15 giây. Tệ hơn cả chậm — chụp ở giây thứ 25 ra một trang **trắng**, vì đúng lúc
  * ấy trang đang thay nội dung; chụp ở giây thứ 8 thì đủ cả. Muộn hơn không phải là chắc hơn.
  *
- * Nên có hai đường về đích: mạng lặng, hoặc đã vẽ ra chữ và chờ thêm ngần này cho ảnh với font
- * kịp về. Cái nào tới trước thì chụp.
+ * Nên có hai đường về đích: mạng lặng, hoặc đã vẽ ra chữ và chờ thêm ngần này. Cái nào tới
+ * trước thì đi tiếp.
+ *
+ * Ngắn — một giây rưỡi — vì đây không còn là lần chờ cuối. Sau nó còn cả đoạn cuộn qua bốn màn
+ * hình và một lần đợi ảnh về ở đáy, nên trang nào chưa kịp xong ở đây vẫn còn mấy giây nữa.
  */
-export const PAINTED_MS = Number(process.env.SHOT_PAINTED_MS ?? 3000);
+export const PAINTED_MS = Number(process.env.SHOT_PAINTED_MS ?? 1500);
 /**
  * Trang vẫn trống mà mạng đã lặng thì đợi tới đây rồi mới chịu chụp một trang trống.
  *
@@ -117,6 +120,19 @@ export const LOAD_MS = Number(process.env.SHOT_LOAD_MS ?? 15_000);
 export const SETTLE_MS = Number(process.env.SHOT_SETTLE_MS ?? 400);
 
 /**
+ * Cuộn xong thì đợi thêm nhiều nhất chừng này cho ảnh vừa gọi kịp về.
+ *
+ * Cuộn **là** một lần tải nữa, không phải một cú di chuyển. Bốn màn hình của `theguardian.com`
+ * chụp ngay sau khi cuộn ra một trang bố cục đầy đủ mà **mọi ô ảnh đều trắng**: cuộn qua 3200px
+ * chỉ kịp đánh thức chừng ấy ảnh, còn chúng về tới nơi thì đã muộn nửa giây. Nhìn từ log thì đó
+ * là một lần chụp thành công, nhẹ bất thường.
+ */
+export const SCROLLED_MS = Number(process.env.SHOT_SCROLLED_MS ?? 6000);
+/// Dừng lại ở mỗi nấc cuộn chừng này. Xem `scrollDown` — đây là con số quyết định bao nhiêu ảnh
+/// trên trang kịp được đánh thức.
+export const DWELL_MS = Number(process.env.SHOT_DWELL_MS ?? 250);
+
+/**
  * Chụp mấy màn hình.
  *
  * Hai, không phải một. Một màn hình đầu của gần như mọi trang bây giờ là logo, thanh điều hướng,
@@ -128,11 +144,26 @@ export const SETTLE_MS = Number(process.env.SHOT_SETTLE_MS ?? 400);
  * trên điện thoại, và là một tấm ảnh chiếm cả màn hình người khác. Ai cần cả trang thì gõ
  * `/anh dai`.
  */
-export const PAGES = Number(process.env.SHOT_PAGES ?? 2);
+export const PAGES = Number(process.env.SHOT_PAGES ?? 4);
 
 /// Chụp cả trang dài thì cắt ở đây. Một bài báo dài 20.000px thành một cái ảnh không ai đọc nổi
-/// trong khung chat, và gần như chắc chắn vượt 2 MB.
-export const MOST_FULL_HEIGHT = 4000;
+/// trong khung chat.
+export const MOST_FULL_HEIGHT = Number(process.env.SHOT_FULL_HEIGHT ?? 8000);
+
+/**
+ * Cỡ ảnh nhắm tới, và trần cứng.
+ *
+ * Trần của nền tảng là 2 MB, nhưng 2 MB là **quá nặng cho một tin nhắn**: người ta đang ngồi 4G
+ * trong quán, và một tấm ảnh bot tự gửi vào giữa cuộc nói chuyện thì không ai chọn tải nó cả.
+ *
+ * Không có đường nén nào khác ngoài giảm điểm ảnh: nền tảng chỉ nhận PNG với SVG — không JPEG —
+ * và SVG bọc một tấm JPEG cũng bị chặn có chủ ý (`href="data:"` nằm trong regex `UnsafeSvg` của
+ * `BotApi.cs`). Nên "nén" ở đây là thu nhỏ, và thu bao nhiêu thì đo mà ra, xem `fit`.
+ */
+export const AIM_BYTES = Number(process.env.SHOT_AIM_BYTES ?? 900_000);
+/// Thu nhỏ tới đây là hết: dưới nữa thì chữ trên ảnh không còn đọc được, mà một tấm ảnh nhẹ
+/// không đọc được thì nhẹ để làm gì.
+export const LEAST_SCALE = Number(process.env.SHOT_LEAST_SCALE ?? 0.5);
 
 /// Những chỗ Chrome hay nằm, xếp theo thứ tự thử. `CHROME_PATH` đặt trước tất cả.
 const PLACES = [
@@ -373,7 +404,7 @@ export async function shot(chrome, address, {
   width = WIDTH, height = HEIGHT, fullPage = false, pages = PAGES,
   loadMs = LOAD_MS, settleMs = SETTLE_MS,
   quietMs = QUIET_MS, leastMs = LEAST_MS, paintedMs = PAINTED_MS, blankMs = BLANK_MS,
-  mostBytes = MOST_BYTES, vet = vetUrl,
+  scrolledMs = SCROLLED_MS, aimBytes = AIM_BYTES, mostBytes = MOST_BYTES, vet = vetUrl,
 } = {}) {
   const contextId = (await chrome.send('Target.createBrowserContext', { disposeOnDetach: false })).browserContextId;
   let targetId = null;
@@ -481,8 +512,17 @@ export async function shot(chrome, address, {
     // xám: ảnh trên gần như mọi trang bây giờ chỉ tải khi trôi vào tầm mắt, và "tầm mắt" của
     // trang là chỗ nó tưởng người ta đang nhìn — không phải vùng mình sắp chụp.
     const want = fullPage ? MOST_FULL_HEIGHT : height * pages;
-    await scrollThrough(at, height, want);
+    // Dọn hai lần: lần này để mở khoá cuộn trước khi cuộn, lần sau vì rất nhiều banner chỉ hiện
+    // ra **sau khi** người ta cuộn được một đoạn.
+    await sweep(at);
+    await scrollDown(at, height, want);
+    // Đợi ở **đáy**, không phải sau khi đã lên lại đầu trang: ảnh vừa được đánh thức thì phải
+    // đứng đó cho chúng về. Dọn lần nữa vì rất nhiều banner chỉ hiện ra sau khi người ta cuộn.
+    await untilStill(marks, { quietMs, mostMs: scrolledMs });
+    const swept = await sweep(at);
+    await scrollHome(at);
     await wait(settleMs);
+    if (swept) console.log(`${address}: ẩn ${swept} lớp che`);
 
     const metrics = await at('Page.getLayoutMetrics');
     const size = metrics.cssContentSize ?? metrics.contentSize ?? { width, height };
@@ -494,8 +534,8 @@ export async function shot(chrome, address, {
     // hai màn hình thì vốn là xem trước, và ghi "còn nữa" dưới mỗi tấm là một dòng thừa mỗi lần.
     const truncated = fullPage && tall > MOST_FULL_HEIGHT;
 
-    const png = await fit(at, clip, mostBytes, clip.height > height);
-    return { png, title, url, truncated };
+    const { png, scale } = await fit(at, clip, { aim: aimBytes, most: mostBytes, beyond: clip.height > height });
+    return { png, title, url, truncated, scale, height: clip.height };
   } finally {
     for (const off of undo) off();
     if (targetId) await chrome.send('Target.closeTarget', { targetId }).catch(() => {});
@@ -564,47 +604,139 @@ export async function untilReady(marks, {
 }
 
 /**
- * Cuộn qua phần sắp chụp, rồi về đầu trang.
+ * Đợi mạng lặng lại sau khi cuộn.
  *
- * Từng nấc một màn hình chứ không nhảy thẳng xuống đáy: trang nào cũng nghe sự kiện cuộn để
- * quyết định tải ảnh nào, và một cú nhảy từ 0 xuống 4000 thì mọi thứ ở giữa không bao giờ đi qua
- * tầm mắt. Về đầu trang ở cuối, vì đó là chỗ tấm ảnh bắt đầu.
+ * Giống `untilReady` nhưng không hỏi gì trang cả: tới đây thì đã biết trang có nội dung, thứ
+ * duy nhất còn chờ là mấy tấm ảnh vừa bị đánh thức. Trần ngắn hơn hẳn, vì một trang tự làm mình
+ * bận mãi thì cũng không vì thế mà có thêm tấm ảnh nào.
  */
-async function scrollThrough(at, step, want) {
-  const expression = `(async () => {
-    const pause = (ms) => new Promise((go) => setTimeout(go, ms));
-    for (let y = ${step}; y <= ${want}; y += ${step}) {
-      window.scrollTo(0, y);
-      await pause(120);
-    }
-    window.scrollTo(0, 0);
-    await pause(60);
-  })()`;
-  await at('Runtime.evaluate', { expression, awaitPromise: true, timeout: 8000 }).catch(() => {});
+export async function untilStill(marks, {
+  quietMs = QUIET_MS, mostMs = SCROLLED_MS, tick = 100, now = () => Date.now(), pause = wait,
+} = {}) {
+  const began = now();
+  for (;;) {
+    const at = now();
+    if (at - began >= mostMs) return 'het-gio';
+    if (at - marks.beat >= quietMs) return 'lang';
+    await pause(tick);
+  }
 }
 
 /**
- * Chụp cho tới khi vừa trần.
+ * Dọn những lớp nổi che mất nội dung.
  *
- * Nền tảng chỉ nhận PNG và SVG, nên không có đường JPEG để mà nén cho nhỏ; thứ đổi được là số
- * điểm ảnh. Thu nhỏ dần chứ không thu thẳng xuống đáy: gần hết các trang vừa ngay từ lần đầu,
- * và một ảnh 1280 rõ chữ thì hơn hẳn một ảnh 640 chắc chắn vừa.
+ * Banner "chấp nhận cookie" dính đáy màn hình là thứ hỏng nặng nhất với một tấm ảnh bốn màn
+ * hình: nó nằm nguyên ở đáy khung chụp và ăn mất cả một dải ngang, và với trang khoá cuộn sau
+ * cái banner ấy thì ảnh chỉ còn mỗi nó.
+ *
+ * Cách hiển nhiên là chụp 80% mỗi màn hình rồi ghép — nhưng thế là bỏ đi 640px nội dung **thật**
+ * trên bốn màn hình, mỗi lần chụp, kể cả những trang chẳng có banner nào; mà banner cao hơn 20%
+ * thì vẫn lọt vào. Chữa cái nhìn thấy chứ không chữa cái gây ra.
+ *
+ * Nên dọn thẳng: mọi thứ `fixed` hay `sticky` mà **dính đáy** hoặc **phủ hơn một phần ba khung**
+ * đều bị ẩn. Hai luật ấy bắt đúng banner cookie, lớp phủ mờ, hộp thoại đăng ký nhận tin, nút
+ * chat góc phải và nút "lên đầu trang" — còn thanh điều hướng dính đỉnh thì giữ, vì nó là một
+ * phần của trang và trong ảnh nó chỉ hiện một lần ở trên cùng.
+ *
+ * **Ẩn chứ không bấm "Đồng ý".** Bấm hộ người khác một nút đồng ý là quyết định thay họ một
+ * chuyện không phải của mình — mà nút ấy mỗi trang một chữ, mỗi nước một luật.
+ *
+ * Và mở lại cuộn: trang có hộp thoại thường khoá `overflow` của `body`, nên không mở lại thì
+ * phần dưới không bao giờ cuộn tới được, ảnh bốn màn hình thành bốn lần màn hình đầu.
  */
-async function fit(at, clip, mostBytes, beyondViewport) {
-  const ladder = [1, 0.8, 0.65, 0.5, 0.4];
-  let last = null;
-  for (const scale of ladder) {
+const SWEEP = `(() => {
+  const w = innerWidth, h = innerHeight;
+  let gone = 0;
+  for (const el of document.querySelectorAll('body *')) {
+    const style = getComputedStyle(el);
+    // Chỉ \`fixed\`. \`sticky\` từng nằm trong đây và nó dọn nhầm ngay: theguardian.com gói nội
+    // dung trong những khối \`sticky\` rộng cả trang, nên luật "phủ hơn một phần ba khung" ăn
+    // luôn cả khối ảnh — ảnh chụp ra bố cục đầy đủ mà mọi ô ảnh đều trắng, 286 KB thay vì 880.
+    // Một banner dính đáy sót lại thì chỉ xấu; xoá nhầm nội dung thì là nói dối về trang ấy.
+    if (style.position !== 'fixed') continue;
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+    const box = el.getBoundingClientRect();
+    if (box.width < 40 || box.height < 24) continue;
+    // Một dải ngang dính đáy: banner cookie, thanh "tải app", khay quảng cáo.
+    const bar = box.bottom >= h - 4 && box.top > h * 0.35 && box.width > w * 0.5;
+    // Một lớp phủ gần kín khung: hộp thoại cookie, tường đăng ký, nền mờ sau nó.
+    const overlay = box.width >= w * 0.6 && box.height >= h * 0.5;
+    if (!bar && !overlay) continue;
+    el.style.setProperty('display', 'none', 'important');
+    gone += 1;
+  }
+  for (const el of [document.documentElement, document.body]) {
+    if (el && getComputedStyle(el).overflow === 'hidden') el.style.setProperty('overflow', 'visible', 'important');
+  }
+  return gone;
+})()`;
+
+async function sweep(at) {
+  const answer = await at('Runtime.evaluate', { expression: SWEEP, returnByValue: true, timeout: 3000 })
+    .catch(() => null);
+  return Number(answer?.result?.value ?? 0);
+}
+
+/**
+ * Cuộn xuống hết phần sắp chụp.
+ *
+ * Nửa khung một nấc, dừng lại ở mỗi nấc — không phải một khung một nấc, và không phải nhảy
+ * thẳng xuống đáy. Trang quyết định tải ảnh nào bằng cách xem cái gì đang trôi qua tầm mắt, nên
+ * nấc càng thưa và càng vội thì càng nhiều thứ không bao giờ đi qua đó. Đo trên bốn màn hình
+ * `theguardian.com`: một khung một nấc, dừng 150ms — **8 trên 112 ảnh** tải xong; nửa khung một
+ * nấc, dừng lâu hơn — **22**. Cùng một trang, cùng một khoảng thời gian chờ sau đó.
+ *
+ * Không tự về đầu trang ở cuối: chỗ gọi còn phải đứng ở đáy đợi mấy tấm ảnh vừa đánh thức về
+ * đã, rồi mới lên. Về sớm là hỏi xong rồi bỏ đi trước khi nghe trả lời.
+ */
+async function scrollDown(at, step, want, dwellMs = DWELL_MS) {
+  const expression = `(async () => {
+    const pause = (ms) => new Promise((go) => setTimeout(go, ms));
+    const nudge = ${Math.max(200, Math.round(step / 2))};
+    for (let y = nudge; y <= ${want}; y += nudge) {
+      window.scrollTo(0, y);
+      await pause(${dwellMs});
+    }
+  })()`;
+  await at('Runtime.evaluate', { expression, awaitPromise: true, timeout: 30_000 }).catch(() => {});
+}
+
+/// Về đầu trang, vì đó là chỗ tấm ảnh bắt đầu.
+async function scrollHome(at) {
+  await at('Runtime.evaluate', { expression: 'window.scrollTo(0, 0)', timeout: 2000 }).catch(() => {});
+}
+
+/**
+ * Chụp, rồi thu cho vừa cỡ nhắm tới.
+ *
+ * Đoán chứ không dò từng nấc. Số byte của một tấm PNG đi gần như tuyến tính theo **số điểm
+ * ảnh**, mà số điểm ảnh đi theo bình phương tỉ lệ — nên tỉ lệ cần là căn bậc hai của tỉ lệ byte,
+ * và một lần đoán thường trúng. Dò năm nấc 1 → 0,8 → 0,65 → 0,5 → 0,4 thì với một trang báo bốn
+ * màn hình là năm lần chụp, mỗi lần gần một giây, để tới đúng chỗ mà phép nhân cho ngay.
+ *
+ * Trang chữ thì không bị đụng tới: nó nhẹ sẵn, chụp một lần ở tỉ lệ đầy là xong. Trang ảnh mới
+ * phải thu, và đó cũng đúng là trang mà thu nhỏ ít mất mát nhất.
+ */
+export async function fit(at, clip, { aim = AIM_BYTES, most = MOST_BYTES, beyond = false, least = LEAST_SCALE } = {}) {
+  let scale = 1;
+  let made = null;
+  for (let tries = 0; tries < 3; tries += 1) {
     const answer = await at('Page.captureScreenshot', {
       format: 'png',
-      captureBeyondViewport: Boolean(beyondViewport),
+      captureBeyondViewport: Boolean(beyond),
       clip: { ...clip, scale },
       optimizeForSpeed: false,
     });
-    last = Buffer.from(answer.data, 'base64');
-    if (last.byteLength <= mostBytes) return last;
+    made = { png: Buffer.from(answer.data, 'base64'), scale };
+    if (made.png.byteLength <= aim) return made;
+
+    const next = Math.max(least, scale * Math.sqrt(aim / made.png.byteLength));
+    // Đã ở đáy, hoặc lần đoán sau không nhỏ hơn đáng kể — thu thêm chỉ tốn một lần chụp nữa.
+    if (next >= scale - 0.02) break;
+    scale = next;
   }
-  // Tới đây thì trang là một tấm ảnh chụp khổng lồ. Trả cái nhỏ nhất và để chỗ gọi nói ra.
-  throw new Error(`ảnh quá nặng (${Math.round(last.byteLength / 1024)} KB) dù đã thu nhỏ hết cỡ`);
+  if (made.png.byteLength <= most) return made;
+  throw new Error(`ảnh quá nặng (${Math.round(made.png.byteLength / 1024)} KB) dù đã thu nhỏ hết cỡ`);
 }
 
 async function pageTitle(at) {
