@@ -127,10 +127,10 @@ export const SETTLE_MS = Number(process.env.SHOT_SETTLE_MS ?? 400);
  * chỉ kịp đánh thức chừng ấy ảnh, còn chúng về tới nơi thì đã muộn nửa giây. Nhìn từ log thì đó
  * là một lần chụp thành công, nhẹ bất thường.
  */
-export const SCROLLED_MS = Number(process.env.SHOT_SCROLLED_MS ?? 6000);
+export const SCROLLED_MS = Number(process.env.SHOT_SCROLLED_MS ?? 4500);
 /// Dừng lại ở mỗi nấc cuộn chừng này. Xem `scrollDown` — đây là con số quyết định bao nhiêu ảnh
 /// trên trang kịp được đánh thức.
-export const DWELL_MS = Number(process.env.SHOT_DWELL_MS ?? 250);
+export const DWELL_MS = Number(process.env.SHOT_DWELL_MS ?? 400);
 
 /**
  * Chụp mấy màn hình.
@@ -144,7 +144,7 @@ export const DWELL_MS = Number(process.env.SHOT_DWELL_MS ?? 250);
  * trên điện thoại, và là một tấm ảnh chiếm cả màn hình người khác. Ai cần cả trang thì gõ
  * `/anh dai`.
  */
-export const PAGES = Number(process.env.SHOT_PAGES ?? 4);
+export const PAGES = Number(process.env.SHOT_PAGES ?? 6);
 
 /// Chụp cả trang dài thì cắt ở đây. Một bài báo dài 20.000px thành một cái ảnh không ai đọc nổi
 /// trong khung chat.
@@ -162,8 +162,22 @@ export const MOST_FULL_HEIGHT = Number(process.env.SHOT_FULL_HEIGHT ?? 8000);
  */
 export const AIM_BYTES = Number(process.env.SHOT_AIM_BYTES ?? 900_000);
 /// Thu nhỏ tới đây là hết: dưới nữa thì chữ trên ảnh không còn đọc được, mà một tấm ảnh nhẹ
-/// không đọc được thì nhẹ để làm gì.
+/// không đọc được thì nhẹ để làm gì. Trừ một chỗ — xem `SAFE_BYTES`.
 export const LEAST_SCALE = Number(process.env.SHOT_LEAST_SCALE ?? 0.5);
+
+/**
+ * Trần cho **một gói CDP**, và nó là một cái trần vật lý chứ không phải một lựa chọn.
+ *
+ * `WebSocket` có sẵn của Node có giới hạn kích thước gói. Đo được: base64 3,88 MB qua lọt, cỡ
+ * gấp đôi thì **đứt kết nối** — không lỗi, không mã đóng, chỉ là cái socket chết và mọi lệnh
+ * đang chờ hỏng theo. Ảnh sáu màn hình của một trang báo chụp ở tỉ lệ 1 nằm đúng vùng ấy, nên
+ * nâng từ bốn lên sáu màn hình làm chết Chrome ngay ở trang thứ nhất.
+ *
+ * Đây là lý do `fit` **đo trước rồi mới chụp** thay vì chụp to rồi thu: tấm ảnh quá khổ ấy
+ * không bao giờ được phép tồn tại, chứ không phải tồn tại rồi bị bỏ đi. Và cũng vì nó mà tỉ lệ
+ * được phép xuống dưới `LEAST_SCALE` — chữ nhỏ khó đọc còn hơn không có ảnh nào.
+ */
+export const SAFE_BYTES = Number(process.env.SHOT_SAFE_BYTES ?? 2_600_000);
 
 /// Những chỗ Chrome hay nằm, xếp theo thứ tự thử. `CHROME_PATH` đặt trước tất cả.
 const PLACES = [
@@ -234,8 +248,12 @@ function talk(socket) {
     for (const { reject } of waiting.values()) reject(dead);
     waiting.clear();
   };
-  socket.onclose = () => stop('Chrome đã đóng kết nối');
-  socket.onerror = () => stop('kết nối tới Chrome hỏng');
+  // Mã đóng và lý do, không phải một câu chung chung. 1009 là "gói quá to" — và đó đúng là cái
+  // đã xảy ra với ảnh sáu màn hình, mà một dòng "kết nối hỏng" thì không đời nào chỉ ra được.
+  socket.onclose = (event) => stop(
+    `Chrome đã đóng kết nối (mã ${event?.code ?? '?'}${event?.reason ? `: ${event.reason}` : ''})`,
+  );
+  socket.onerror = (event) => stop(`kết nối tới Chrome hỏng (${event?.message ?? 'không rõ'})`);
 
   return {
     send(method, params = {}, sessionId) {
@@ -363,19 +381,31 @@ export async function launch({ bin = chromePath(), args = [] } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'bachhoa-chrome-'));
   const child = spawn(bin, flags(dir, args), { stdio: ['ignore', 'ignore', 'pipe'] });
 
+  // Chrome nói địa chỉ cổng gỡ lỗi ra stderr rồi nói tiếp đủ thứ khác suốt đời nó. Giữ lại
+  // **mấy dòng cuối** thôi: lần đầu viết là `log += chunk` không bao giờ dừng, tức là một chuỗi
+  // lớn lên mãi trong một tiến trình chạy hàng tuần — và đúng những dòng cuối ấy mới là thứ cần,
+  // vì chúng là lời trăng trối của Chrome lúc nó chết.
+  const said = [];
+  const remember = (chunk) => {
+    said.push(String(chunk));
+    while (said.length > 20) said.shift();
+  };
+  const lastWords = () => said.join('').slice(-600).trim();
+
   const endpoint = await new Promise((resolve, reject) => {
-    let log = '';
-    const giveUp = setTimeout(() => reject(new Error(`Chrome không nói gì sau 30 giây:\n${log.slice(-500)}`)), 30_000);
-    child.stderr.on('data', (chunk) => {
-      log += chunk;
-      const found = log.match(/ws:\/\/\S+/);
-      if (found) {
-        clearTimeout(giveUp);
-        resolve(found[0]);
-      }
-    });
+    const giveUp = setTimeout(() => reject(new Error(`Chrome không nói gì sau 30 giây:\n${lastWords()}`)), 30_000);
+    const listen = (chunk) => {
+      remember(chunk);
+      const found = said.join('').match(/ws:\/\/\S+/);
+      if (!found) return;
+      clearTimeout(giveUp);
+      child.stderr.off('data', listen);
+      child.stderr.on('data', remember);
+      resolve(found[0]);
+    };
+    child.stderr.on('data', listen);
     child.once('error', (problem) => { clearTimeout(giveUp); reject(problem); });
-    child.once('exit', (code) => { clearTimeout(giveUp); reject(new Error(`Chrome tắt ngay, mã ${code}:\n${log.slice(-500)}`)); });
+    child.once('exit', (code) => { clearTimeout(giveUp); reject(new Error(`Chrome tắt ngay, mã ${code}:\n${lastWords()}`)); });
   });
 
   const chrome = talk(await socketTo(endpoint));
@@ -389,7 +419,14 @@ export async function launch({ bin = chromePath(), args = [] } = {}) {
     setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* xong */ } }, 3000).unref?.();
     try { rmSync(dir, { recursive: true, force: true }); } catch { /* thư mục tạm, kệ */ }
   };
-  child.once('exit', () => { closed = true; chrome.close(); });
+  // Chrome chết giữa chừng là chuyện có thật — hết bộ nhớ, bị OOM killer dọn. Nói ra lời trăng
+  // trối của nó, vì không có dòng này thì chỗ gọi chỉ thấy "kết nối tới Chrome hỏng" và không
+  // bao giờ biết vì sao.
+  child.once('exit', (code, signal) => {
+    if (!closed) console.error(`Chrome tắt (mã ${code}, tín hiệu ${signal}):\n${lastWords()}`);
+    closed = true;
+    chrome.close();
+  });
 
   return { chrome, close, shot: (url, options) => shot(chrome, url, options) };
 }
@@ -505,28 +542,53 @@ export async function shot(chrome, address, {
     if (how === 'trang-trong') console.warn(`${address}: trang vẫn trống sau ${blankMs}ms, chụp thế`);
     await wait(settleMs);
 
-    const title = await pageTitle(at);
-    const url = await currentUrl(at, address);
+    const { title, url } = await whatItIs(at, address);
 
     // Cuộn xuống hết phần sắp chụp rồi mới chụp. Không cuộn thì nửa dưới tấm ảnh là một dãy ô
     // xám: ảnh trên gần như mọi trang bây giờ chỉ tải khi trôi vào tầm mắt, và "tầm mắt" của
     // trang là chỗ nó tưởng người ta đang nhìn — không phải vùng mình sắp chụp.
     const want = fullPage ? MOST_FULL_HEIGHT : height * pages;
-    // Dọn hai lần: lần này để mở khoá cuộn trước khi cuộn, lần sau vì rất nhiều banner chỉ hiện
-    // ra **sau khi** người ta cuộn được một đoạn.
-    await sweep(at);
-    await scrollDown(at, height, want);
-    // Đợi ở **đáy**, không phải sau khi đã lên lại đầu trang: ảnh vừa được đánh thức thì phải
-    // đứng đó cho chúng về. Dọn lần nữa vì rất nhiều banner chỉ hiện ra sau khi người ta cuộn.
-    await untilStill(marks, { quietMs, mostMs: scrolledMs });
-    const swept = await sweep(at);
+    /**
+     * Cuộn, rồi hỏi lại trang xem nó đã cao lên chưa.
+     *
+     * Trang **mọc ra sau khi mình tưởng nó xong**. Đo `theguardian.com`: ở giây thứ 7 cả tài
+     * liệu vẫn cao đúng 800px — một khung — nên cuộn xuống 4800 là cuộn vào chỗ không có gì, và
+     * ảnh chụp ra đúng một khung, lại còn là khung dở dang ở giữa trang. Tới quãng giây thứ 10
+     * nó mới thành 9230px.
+     *
+     * Nên cuộn xong thì đo lại, và nếu trang đã cao lên thì đi thêm **một** lượt nữa. Một, chứ
+     * không phải tới khi nào thôi: trang tự nạp bài khi cuộn thì lượt nào cũng thấy nó cao lên,
+     * và bot sẽ cuộn theo nó tới hết đời.
+     *
+     * Dọn lớp che ở đầu mỗi lượt: lượt đầu để mở khoá cuộn trước khi cuộn, các lượt sau vì rất
+     * nhiều banner chỉ hiện ra **sau khi** người ta cuộn được một đoạn.
+     */
+    let swept = 0;
+    // Đo **trước** khi cuộn, không bắt đầu từ 0: bắt đầu từ 0 thì trang một khung cũng tính là
+    // "đã cao lên", và mọi trang ngắn đều phải đi thừa cả một lượt cuộn nữa cho một chỗ không
+    // có gì. `example.com` mất 4,9 giây cho đúng chuyện ấy.
+    let reached = await docHeight(at);
+    for (let pass = 0; pass < 2; pass += 1) {
+      swept += await sweep(at);
+      // Chỉ cuộn tới đáy trang **hiện có**. Cuộn xuống 4800 của một trang cao 800 là mười nấc
+      // đi qua chỗ trống, mỗi nấc một vòng hỏi đáp qua socket.
+      await scrollDown(at, marks, height, Math.min(want, Math.max(height, reached)));
+      // Đợi ở **đáy**, không phải sau khi đã lên lại đầu trang: ảnh vừa được đánh thức thì phải
+      // đứng đó cho chúng về.
+      await untilStill(marks, { quietMs, mostMs: pass ? Math.round(scrolledMs / 2) : scrolledMs });
+      const now = await docHeight(at);
+      const grew = now > reached + height / 2;
+      reached = Math.max(reached, now);
+      if (!grew || reached >= want) break;
+    }
+    swept += await sweep(at);
     await scrollHome(at);
     await wait(settleMs);
     if (swept) console.log(`${address}: ẩn ${swept} lớp che`);
 
     const metrics = await at('Page.getLayoutMetrics');
     const size = metrics.cssContentSize ?? metrics.contentSize ?? { width, height };
-    const tall = Math.max(height, Math.ceil(size.height));
+    const tall = Math.max(height, Math.ceil(size.height), reached);
     // Trang ngắn hơn phần muốn chụp thì chụp đúng nó, không đệm thêm một khoảng trắng. Một tấm
     // ảnh có nửa dưới trắng trơn trông y như trang bị lỗi.
     const clip = { x: 0, y: 0, width, height: Math.min(tall, want), scale: 1 };
@@ -534,7 +596,9 @@ export async function shot(chrome, address, {
     // hai màn hình thì vốn là xem trước, và ghi "còn nữa" dưới mỗi tấm là một dòng thừa mỗi lần.
     const truncated = fullPage && tall > MOST_FULL_HEIGHT;
 
-    const { png, scale } = await fit(at, clip, { aim: aimBytes, most: mostBytes, beyond: clip.height > height });
+    const { png, scale } = await fit(at, clip, {
+      aim: aimBytes, most: mostBytes, beyond: clip.height > height,
+    });
     return { png, title, url, truncated, scale, height: clip.height };
   } finally {
     for (const off of undo) off();
@@ -684,21 +748,32 @@ async function sweep(at) {
  * thẳng xuống đáy. Trang quyết định tải ảnh nào bằng cách xem cái gì đang trôi qua tầm mắt, nên
  * nấc càng thưa và càng vội thì càng nhiều thứ không bao giờ đi qua đó. Đo trên bốn màn hình
  * `theguardian.com`: một khung một nấc, dừng 150ms — **8 trên 112 ảnh** tải xong; nửa khung một
- * nấc, dừng lâu hơn — **22**. Cùng một trang, cùng một khoảng thời gian chờ sau đó.
+ * nấc, dừng lâu hơn — **22**.
+ *
+ * Dừng bao lâu thì **nghe mạng mà dừng**, không đếm giây: mỗi nấc chờ tới khi mạng im được một
+ * nhịp ngắn, nhiều nhất `dwellMs`. Trang nhẹ đi hết mười hai nấc trong hơn một giây, trang nặng
+ * được đúng chừng nó cần. Đếm giây cố định thì trang nào cũng trả cùng một cái giá, mà cái giá
+ * ấy phải đặt theo trang chậm nhất.
  *
  * Không tự về đầu trang ở cuối: chỗ gọi còn phải đứng ở đáy đợi mấy tấm ảnh vừa đánh thức về
  * đã, rồi mới lên. Về sớm là hỏi xong rồi bỏ đi trước khi nghe trả lời.
  */
-async function scrollDown(at, step, want, dwellMs = DWELL_MS) {
-  const expression = `(async () => {
-    const pause = (ms) => new Promise((go) => setTimeout(go, ms));
-    const nudge = ${Math.max(200, Math.round(step / 2))};
-    for (let y = nudge; y <= ${want}; y += nudge) {
-      window.scrollTo(0, y);
-      await pause(${dwellMs});
-    }
-  })()`;
-  await at('Runtime.evaluate', { expression, awaitPromise: true, timeout: 30_000 }).catch(() => {});
+async function scrollDown(at, marks, step, want, { dwellMs = DWELL_MS } = {}) {
+  const nudge = Math.max(200, Math.round(step / 2));
+  for (let y = nudge; y <= want; y += nudge) {
+    await at('Runtime.evaluate', { expression: `window.scrollTo(0, ${y})`, timeout: 2000 }).catch(() => {});
+    await untilStill(marks, { quietMs: 120, mostMs: dwellMs, tick: 60 });
+  }
+}
+
+/// Chiều cao thật của trang **lúc này**. Hỏi lại được, vì nó đổi — xem chỗ gọi trong `shot`.
+async function docHeight(at) {
+  const answer = await at('Runtime.evaluate', {
+    expression: 'Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)',
+    returnByValue: true,
+    timeout: 2000,
+  }).catch(() => null);
+  return Number(answer?.result?.value ?? 0);
 }
 
 /// Về đầu trang, vì đó là chỗ tấm ảnh bắt đầu.
@@ -707,55 +782,76 @@ async function scrollHome(at) {
 }
 
 /**
- * Chụp, rồi thu cho vừa cỡ nhắm tới.
+ * Đo một khung, rồi chụp đúng một lần ở tỉ lệ tính ra.
  *
- * Đoán chứ không dò từng nấc. Số byte của một tấm PNG đi gần như tuyến tính theo **số điểm
- * ảnh**, mà số điểm ảnh đi theo bình phương tỉ lệ — nên tỉ lệ cần là căn bậc hai của tỉ lệ byte,
- * và một lần đoán thường trúng. Dò năm nấc 1 → 0,8 → 0,65 → 0,5 → 0,4 thì với một trang báo bốn
- * màn hình là năm lần chụp, mỗi lần gần một giây, để tới đúng chỗ mà phép nhân cho ngay.
+ * Không chụp ở tỉ lệ 1 rồi xem có nặng quá không: với sáu màn hình thì chính tấm ảnh thử ấy là
+ * thứ làm đứt kết nối (xem `SAFE_BYTES`). Nên đo trên một khung — nhỏ, chắc chắn qua lọt — để
+ * biết trang này tốn bao nhiêu byte mỗi điểm ảnh, rồi nhân lên cho cả vùng sắp chụp.
  *
- * Trang chữ thì không bị đụng tới: nó nhẹ sẵn, chụp một lần ở tỉ lệ đầy là xong. Trang ảnh mới
- * phải thu, và đó cũng đúng là trang mà thu nhỏ ít mất mát nhất.
+ * Số byte của PNG đi gần như tuyến tính theo số điểm ảnh, mà số điểm ảnh đi theo bình phương tỉ
+ * lệ — nên tỉ lệ cần là căn bậc hai của tỉ lệ byte. Một trang chữ ra tỉ lệ 1 và không bị đụng
+ * tới; một trang đầy ảnh ra 0,5, và đó cũng đúng là loại trang mà thu nhỏ ít mất mát nhất.
+ *
+ * Đo rồi vẫn kiểm: ước lượng từ khung đầu có thể trật, vì khung đầu là banner với thanh điều
+ * hướng chứ chưa phải phần ảnh ở dưới. Trật thì sửa một lần nữa bằng chính số thật.
  */
-export async function fit(at, clip, { aim = AIM_BYTES, most = MOST_BYTES, beyond = false, least = LEAST_SCALE } = {}) {
-  let scale = 1;
-  let made = null;
-  for (let tries = 0; tries < 3; tries += 1) {
+export async function fit(at, clip, {
+  aim = AIM_BYTES, most = MOST_BYTES, safe = SAFE_BYTES, beyond = false, least = LEAST_SCALE,
+} = {}) {
+  const snap = async (height, scale) => {
     const answer = await at('Page.captureScreenshot', {
       format: 'png',
       captureBeyondViewport: Boolean(beyond),
-      clip: { ...clip, scale },
+      clip: { ...clip, height, scale },
       optimizeForSpeed: false,
     });
-    made = { png: Buffer.from(answer.data, 'base64'), scale };
-    if (made.png.byteLength <= aim) return made;
+    return Buffer.from(answer.data, 'base64');
+  };
 
-    const next = Math.max(least, scale * Math.sqrt(aim / made.png.byteLength));
-    // Đã ở đáy, hoặc lần đoán sau không nhỏ hơn đáng kể — thu thêm chỉ tốn một lần chụp nữa.
-    if (next >= scale - 0.02) break;
-    scale = next;
+  // Một khung là 1,02 triệu điểm ảnh — kể cả trang nhiễu nhất cũng chỉ ra chừng 3 MB, còn trong
+  // tầm cái socket chịu được.
+  const probeHeight = Math.min(clip.height, HEIGHT);
+  const probe = await snap(probeHeight, 1);
+  if (probeHeight === clip.height && probe.byteLength <= aim) return { png: probe, scale: 1 };
+
+  const perPixel = probe.byteLength / (clip.width * probeHeight);
+  const whole = Math.max(1, perPixel * clip.width * clip.height);
+  let scale = Math.min(1, Math.sqrt(aim / whole));
+  // Sàn cho dễ đọc, rồi trần cho an toàn — theo thứ tự ấy, vì an toàn thắng dễ đọc.
+  scale = Math.max(least, scale);
+  scale = Math.min(scale, Math.sqrt(safe / whole));
+
+  let made = { png: await snap(clip.height, scale), scale };
+  if (made.png.byteLength <= most) {
+    if (made.png.byteLength <= aim) return made;
+    // Ước lượng trật về phía nặng. Sửa bằng số thật, đúng một lần nữa.
+    const next = Math.max(least * 0.7, scale * Math.sqrt(aim / made.png.byteLength));
+    if (next < scale - 0.04) made = { png: await snap(clip.height, next), scale: next };
+    if (made.png.byteLength <= most) return made;
   }
+
+  const rescue = Math.max(0.25, made.scale * Math.sqrt(most / made.png.byteLength) * 0.9);
+  made = { png: await snap(clip.height, rescue), scale: rescue };
   if (made.png.byteLength <= most) return made;
   throw new Error(`ảnh quá nặng (${Math.round(made.png.byteLength / 1024)} KB) dù đã thu nhỏ hết cỡ`);
 }
 
-async function pageTitle(at) {
+/// Tiêu đề và địa chỉ cuối, trong **một** lượt hỏi. Hai lượt là hai vòng qua socket để lấy hai
+/// chuỗi mà trang nào cũng có sẵn cả hai.
+async function whatItIs(at, fallback) {
   try {
     const answer = await at('Runtime.evaluate', {
-      expression: 'document.title || location.host', returnByValue: true, timeout: 2000,
+      expression: 'JSON.stringify({ title: document.title || location.host, url: location.href })',
+      returnByValue: true,
+      timeout: 2000,
     });
-    return String(answer?.result?.value ?? '').trim().slice(0, 160);
+    const found = JSON.parse(String(answer?.result?.value ?? '{}'));
+    return {
+      title: String(found.title ?? '').trim().slice(0, 160),
+      url: String(found.url || fallback),
+    };
   } catch {
-    return '';
-  }
-}
-
-async function currentUrl(at, fallback) {
-  try {
-    const answer = await at('Runtime.evaluate', { expression: 'location.href', returnByValue: true, timeout: 2000 });
-    return String(answer?.result?.value ?? fallback) || fallback;
-  } catch {
-    return fallback;
+    return { title: '', url: fallback };
   }
 }
 

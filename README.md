@@ -1,7 +1,7 @@
 # bachhoabot
 
 Một con bot chụp ảnh trang web trong nhóm chat Cúc Cu. Ai dán một cái link, nó mở trang ấy bằng
-Chrome thật ở khổ màn hình máy tính, cuộn xuống bốn màn hình, chụp lại, rồi gửi tấm ảnh lên nhóm.
+Chrome thật ở khổ màn hình máy tính, cuộn xuống sáu màn hình, chụp lại, rồi gửi tấm ảnh lên nhóm.
 
 Chỉ tấm ảnh. Không có dòng chữ nào dưới nó, không có lời chào lúc được thêm vào nhóm, không một
 câu nào bot không được hỏi.
@@ -22,7 +22,7 @@ Hai thứ này không thay nhau. Chúng nằm cạnh nhau trong cùng một tin 
 | Gõ | Được gì |
 | --- | --- |
 | Dán một cái link vào nhóm | Bot chụp, không cần gõ gì thêm — **cần tắt chế độ riêng tư**, xem dưới |
-| `/anh https://…` | Chụp bốn màn hình đầu, cả nhóm thấy |
+| `/anh https://…` | Chụp sáu màn hình đầu, cả nhóm thấy |
 | `!anh https://…` | Như trên, chỉ người gõ thấy |
 | `/anh dai https://…` | Chụp cả trang dài, không chỉ màn hình đầu |
 | `@bachhoabot https://…` | Gọi tên, nếu ai quen lối ấy |
@@ -40,52 +40,65 @@ chuyển tiếp, dán nhầm hai lần — và ba tấm ảnh giống hệt nhau
 
 ## Chụp bao nhiêu
 
-Bốn màn hình — 1280×3200 — và **không bao giờ hơn**.
+Sáu màn hình — 1280×4800 — và **không bao giờ hơn**.
 
 Một màn hình đầu của gần như mọi trang bây giờ là logo, thanh điều hướng, một cái banner nhận
 cookie và đúng một cái tiêu đề: ảnh chụp ra thứ ai cũng đoán được, còn cái người ta dán link để
 khoe thì nằm dưới mép.
 
-Cái trần cứng ở bốn thì không phải chuyện gu. Rất nhiều trang **tự nạp thêm khi cuộn xuống**:
+Cái trần cứng ở sáu thì không phải chuyện gu. Rất nhiều trang **tự nạp thêm khi cuộn xuống**:
 không có trần thì bot cuộn, trang dài ra, bot cuộn tiếp, và tấm ảnh lớn lên tới khi nào trang ấy
-hết bài — tức là không bao giờ. Trang ngắn hơn bốn màn hình thì chụp đúng nó, không đệm thêm
-khoảng trắng: nửa dưới trắng trơn trông y như trang bị lỗi. Ai cần cả trang thì gõ `/anh dai`,
-cắt ở 8000px.
+hết bài — tức là không bao giờ. Trang ngắn hơn sáu màn hình thì chụp đúng nó, không đệm thêm
+khoảng trắng: nửa dưới trắng trơn trông y như trang bị lỗi.
 
-### Cuộn chậm, và đợi ở đáy
+### Cuộn chậm, đợi ở đáy, rồi hỏi lại
 
 Ảnh trên gần như mọi trang bây giờ chỉ tải khi trôi qua tầm mắt, mà "tầm mắt" của trang là chỗ
 nó tưởng người ta đang nhìn — không phải vùng bot sắp chụp. Nên phải cuộn thật. Nhưng cuộn thế
 nào thì quyết định được bao nhiêu:
 
-| Cách cuộn qua bốn màn hình `theguardian.com` | Ảnh tải xong |
+| Cách cuộn qua `theguardian.com` | Ảnh tải xong |
 | --- | --- |
 | Một khung một nấc, dừng 150ms | **8** trên 112 |
-| Nửa khung một nấc, dừng 250ms, đợi ở đáy | **22** trên 112 |
+| Nửa khung một nấc, đợi mạng im ở mỗi nấc, đợi thêm ở đáy | **22** trên 112 |
 
 Lần đầu làm sai đúng kiểu khó thấy nhất: ảnh chụp ra bố cục đầy đủ, chữ đủ cả, mà **mọi ô ảnh
 đều trắng** — 286 KB thay vì 880. Nhìn từ log thì đó là một lần chụp thành công, chỉ nhẹ bất
 thường.
 
+Dừng ở mỗi nấc thì **nghe mạng mà dừng**, không đếm giây: chờ tới khi mạng im được một nhịp
+ngắn, nhiều nhất 400ms. Trang nhẹ đi hết mười hai nấc trong hơn một giây, trang nặng được đúng
+chừng nó cần — đếm giây cố định thì trang nào cũng phải trả cái giá của trang chậm nhất.
+
 Và phải đợi **ở đáy** rồi mới quay lên đầu trang, chứ không quay lên rồi mới đợi: cuộn là một
-lần *gọi* ảnh, ảnh về tới nơi thì muộn hơn nửa giây. Về sớm là hỏi xong rồi bỏ đi trước khi nghe
-trả lời.
+lần *gọi* ảnh, ảnh về tới nơi thì muộn hơn nửa giây.
+
+Xong một lượt thì **hỏi lại trang xem nó đã cao lên chưa**, vì trang mọc ra sau khi mình tưởng
+nó xong. Đo `theguardian.com`: ở giây thứ 7 cả tài liệu vẫn cao **đúng 800px** — một khung — nên
+cuộn xuống 4800 là cuộn vào chỗ không có gì, và ảnh ra đúng một khung, lại còn là khung dở dang
+ở giữa trang. Tới quãng giây thứ 10 nó mới thành 9230px. Cao lên thì đi thêm **một** lượt nữa;
+một thôi, vì trang tự nạp bài thì lượt nào cũng thấy nó cao lên.
+
+Đo chiều cao **trước** khi cuộn lượt đầu, không bắt đầu từ 0 — bắt đầu từ 0 thì trang một khung
+cũng tính là "đã cao lên", và mọi trang ngắn đều đi thừa một lượt. Và chỉ cuộn tới đáy trang
+*hiện có*: cuộn xuống 4800 của một trang cao 800 là mười nấc đi qua chỗ trống. Hai chỗ ấy đưa
+`example.com` từ 4,9 giây xuống **2,0**.
 
 ### Dọn lớp che
 
-Banner "chấp nhận cookie" dính đáy màn hình là thứ hỏng nặng nhất với một tấm ảnh bốn màn hình:
+Banner "chấp nhận cookie" dính đáy màn hình là thứ hỏng nặng nhất với một tấm ảnh sáu màn hình:
 nó nằm nguyên ở đáy khung chụp và ăn mất cả một dải ngang. Trang nào khoá cuộn sau cái banner ấy
 thì ảnh chỉ còn mỗi nó.
 
-Cách hiển nhiên là chụp 80% mỗi màn hình rồi ghép — nhưng thế là bỏ đi 640px nội dung **thật**
-trên bốn màn hình, mỗi lần chụp, kể cả những trang chẳng có banner nào; mà banner cao hơn 20%
-thì vẫn lọt vào. Chữa cái nhìn thấy chứ không chữa cái gây ra.
+Cách hiển nhiên là chụp 80% mỗi màn hình rồi ghép — nhưng thế là bỏ đi gần một nghìn điểm ảnh
+nội dung **thật** trên sáu màn hình, mỗi lần chụp, kể cả những trang chẳng có banner nào; mà
+banner cao hơn 20% thì vẫn lọt vào. Chữa cái nhìn thấy chứ không chữa cái gây ra.
 
 Nên dọn thẳng: mọi thứ `position: fixed` mà **dính đáy và rộng quá nửa khung**, hoặc **phủ quá
 60% ngang và 50% dọc**, đều bị ẩn. Hai luật ấy bắt banner cookie, lớp phủ mờ, hộp thoại đăng ký
-nhận tin — còn thanh điều hướng dính đỉnh thì giữ, vì nó là một phần của trang và trong ảnh nó
-chỉ hiện một lần ở trên cùng. Dọn hai lần, vì rất nhiều banner chỉ hiện ra **sau khi** cuộn. Và
-mở lại `overflow` của `body`, không thì phần dưới không bao giờ cuộn tới được.
+nhận tin — còn thanh điều hướng dính đỉnh thì giữ, vì trong ảnh nó chỉ hiện một lần ở trên cùng.
+Dọn lại ở đầu mỗi lượt cuộn, vì rất nhiều banner chỉ hiện ra **sau khi** cuộn. Và mở lại
+`overflow` của `body`, không thì phần dưới không bao giờ cuộn tới được.
 
 `sticky` từng nằm trong luật ấy, và nó dọn nhầm ngay: `theguardian.com` gói nội dung trong những
 khối `sticky` rộng cả trang, nên luật "phủ nhiều" ăn luôn cả khối ảnh. Giờ chỉ `fixed`. Một
@@ -224,34 +237,45 @@ dùng chung cookie, localStorage hay cache.
 
 ## Ảnh, và cỡ ảnh
 
+Hai cái trần, và cái chặt hơn không phải cái của nền tảng.
+
 Nền tảng nhận nhiều nhất 2 MB một ảnh. Nhưng 2 MB là **quá nặng cho một tin nhắn**: người ta
 đang ngồi 4G trong quán, và một tấm ảnh bot tự gửi vào giữa cuộc nói chuyện thì không ai chọn
-tải nó cả. Nên bot nhắm **900 KB**, không nhắm cái trần.
+tải nó cả. Nên bot nhắm **900 KB**.
+
+Cái trần thứ hai là một sự thật vật lý, tìm ra bằng cách đâm vào nó: **`WebSocket` có sẵn của
+Node có giới hạn kích thước gói.** Đo được — base64 3,88 MB qua lọt, cỡ gấp đôi thì *đứt kết
+nối*: không lỗi, không mã đóng, chỉ là cái socket chết và mọi lệnh đang chờ hỏng theo. Ảnh sáu
+màn hình của một trang báo chụp ở tỉ lệ 1 nằm đúng vùng ấy, nên nâng từ bốn lên sáu màn hình làm
+"Chrome chết" ngay ở trang thứ nhất — mà Chrome thì vẫn sống, chỉ là không ai nói chuyện với nó
+được nữa.
+
+Nên **đo trước rồi mới chụp**, chứ không chụp to rồi thu: chính tấm ảnh quá khổ ấy là thứ làm
+đứt kết nối, nên nó không được phép tồn tại. Chụp thử **một khung** — nhỏ, chắc chắn qua lọt — để
+biết trang này tốn bao nhiêu byte mỗi điểm ảnh, rồi nhân cho cả vùng sắp chụp. Số byte của PNG
+đi gần như tuyến tính theo số điểm ảnh, mà số điểm ảnh đi theo bình phương tỉ lệ, nên tỉ lệ cần
+là căn bậc hai của tỉ lệ byte. Đo rồi vẫn kiểm lại bằng số thật, vì khung đầu là banner với thanh
+điều hướng chứ chưa phải phần ảnh ở dưới.
 
 Không có đường nén nào khác ngoài giảm điểm ảnh. Nền tảng chỉ nhận PNG với SVG — không JPEG — và
 SVG bọc một tấm JPEG cũng bị chặn có chủ ý: `href="data:"` nằm trong regex `UnsafeSvg` của
-`BotApi.cs`. Nên "nén" ở đây là thu nhỏ.
+`BotApi.cs`.
 
-Thu bao nhiêu thì **đoán, chứ không dò từng nấc**. Số byte của một tấm PNG đi gần như tuyến tính
-theo số điểm ảnh, mà số điểm ảnh đi theo bình phương tỉ lệ — nên tỉ lệ cần là căn bậc hai của tỉ
-lệ byte, và một lần đoán thường trúng. Dò 1 → 0,8 → 0,65 → 0,5 là bốn lần chụp, mỗi lần gần một
-giây trên một trang bốn màn hình, để tới đúng chỗ mà phép nhân cho ngay.
+Đo sáu màn hình:
 
-Trang chữ không bị đụng tới: nó nhẹ sẵn và giữ nguyên 1280px. Trang ảnh mới phải thu — và đó
-cũng đúng là loại trang mà thu nhỏ ít mất mát nhất. Đo bốn màn hình:
+| | Cỡ | Tỉ lệ | Thời gian |
+| --- | --- | --- | --- |
+| `example.com` | 17 KB | 1,00 | 2,0s |
+| `news.ycombinator.com` | 275 KB | 1,00 | 4,4s |
+| `kuku.vn/bot/doc` | 801 KB | 1,00 | 4,5s |
+| `theguardian.com` | 593 KB | 0,85 | 8,7s |
+| `24h.com.vn` | 808 KB | 0,50 | 8,9s |
+| `vnexpress.net` | 916 KB | 0,46 | 9,1s |
+| `bbc.com/news` | 979 KB | 0,54 | 9,8s |
 
-| | Cỡ | Tỉ lệ |
-| --- | --- | --- |
-| `example.com` | 17 KB | 1,00 |
-| `news.ycombinator.com` | 268 KB | 1,00 |
-| `kuku.vn/bot/doc` | 556 KB | 1,00 |
-| `theguardian.com` | 882 KB | 1,00 |
-| `vnexpress.net` | 901 KB | 0,56 |
-| `24h.com.vn` | 909 KB | 0,57 |
-| `bbc.com/news` | 916 KB | 0,58 |
-
-Sàn là 0,5: dưới nữa thì chữ trên ảnh không còn đọc được, mà một tấm ảnh nhẹ không đọc được thì
-nhẹ để làm gì.
+Trang chữ giữ nguyên 1280px và không bị đụng tới. Trang ảnh mới phải thu — và đó cũng đúng là
+loại trang mà thu nhỏ ít mất mát nhất. Sàn là 0,5, trừ khi phải xuống thấp hơn để gói vừa cái
+socket: chữ nhỏ khó đọc còn hơn không có ảnh nào.
 
 Mỗi tin nhắn kèm một `clientMessageId` dựng từ id tin nhắn và địa chỉ, nên gửi lại sau một cú 429
 hay một lần mạng đứt không làm ra tấm ảnh thứ hai trong phòng.
@@ -316,18 +340,26 @@ hoặc `CHROME_URL` trỏ vào một cái ở chỗ khác. Không cần `npm ins
 | `ZEPLAO_BOT_API` | Nền tảng bot. Mặc định `https://api-bot.kuku.vn` |
 | `BACHHOA_STATE` | File nhớ đã đọc tới đâu. Mặc định `data/state.json` |
 | `SHOT_WIDTH`, `SHOT_HEIGHT` | Khổ màn hình. Mặc định 1280×800 |
-| `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 4 |
+| `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 6 |
 | `SHOT_AIM_BYTES`, `SHOT_LEAST_SCALE` | Cỡ ảnh nhắm tới (900 KB) và tỉ lệ thu nhỏ nhất (0,5) |
-| `SHOT_DWELL_MS`, `SHOT_SCROLLED_MS` | Dừng ở mỗi nấc cuộn (250ms), đợi ảnh về ở đáy (6s) |
+| `SHOT_SAFE_BYTES` | Trần cho một gói CDP (2,6 MB). Vượt là đứt socket |
+| `SHOT_DWELL_MS`, `SHOT_SCROLLED_MS` | Dừng lâu nhất ở mỗi nấc cuộn (400ms), đợi ảnh về ở đáy (4,5s) |
 | `SHOT_QUIET_MS`, `SHOT_PAINTED_MS`, `SHOT_BLANK_MS`, `SHOT_LOAD_MS` | Bốn cái mốc ở mục "Chụp lúc nào" (700 · 1500 · 5000 · 15000) |
-| `BACHHOA_ORDERS`, `BACHHOA_WAITING` | Chụp mấy trang một lúc (2), hàng đợi dài nhất (12) |
+| `BACHHOA_ORDERS`, `BACHHOA_WAITING` | Chụp mấy trang một lúc (4), hàng đợi dài nhất (12) |
 | `BACHHOA_SAME_MS` | Cùng link cùng phòng thì bao lâu mới chụp lại. Mặc định 10 phút |
 
-## Hàng đợi
+## Hàng đợi, và vì sao nhiều luồng không làm một tấm ảnh nhanh lên
 
-Hai trang một lúc, không phải một: một trang chậm mất tới mười lăm giây, nối đuôi nhau thì cái
-link thứ ba trong một nhóm đang nói chuyện rôm rả phải đợi gần một phút. Cũng không phải mười:
-mỗi trang là một Chrome đang vẽ.
+Bốn trang một lúc. Một trang mất hai tới mười giây, nối đuôi nhau thì cái link thứ tư trong một
+nhóm đang nói chuyện rôm rả phải đợi gần một phút. Mỗi lần chụp là một tab riêng trong cùng một
+Chrome, nên bốn tab cùng vẽ rẻ hơn hẳn bốn Chrome.
+
+Nhưng **một tấm ảnh không nhanh lên vì có nhiều luồng.** Mở trang, dựng, cuộn, đợi ảnh về rồi
+chụp là một chuỗi việc nối tiếp nhau, và không khúc nào chạy trước khúc trước nó được. Nhiều
+luồng chỉ giúp *nhiều link* xong sớm hơn. Một link thì nhanh lên nhờ bỏ bớt chỗ chờ thừa — đo
+chiều cao trước khi cuộn, chỉ cuộn tới đáy trang hiện có, nghe mạng mà dừng thay vì đếm giây,
+hỏi tiêu đề và địa chỉ trong một lượt thay vì hai — và đó là chỗ đã lấy lại được từ 4,9 giây
+xuống 2,0 cho một trang ngắn, và 12,8 xuống 8,7 cho `theguardian.com`.
 
 Hàng đợi có trần 12, và khi đầy thì **bỏ việc cũ nhất** chứ không bỏ việc mới. Một con bot cặm
 cụi trả nợ hàng đợi là con bot trả lời những câu không ai còn nhớ đã hỏi.
@@ -337,7 +369,9 @@ thì lần hỏi sau nó lại về, và lại, mãi mãi.
 
 Chrome chết — OOM killer lúc ba giờ sáng — thì bot dựng lại rồi chụp tiếp. Không có chỗ ấy thì cái
 chết đó im lặng và vĩnh viễn: mọi câu trả lời sau đó đều là "không mở được trang", và log chỉ nói
-đúng một câu ấy. Treo cũng tính là chết: quá 45 giây thì cắt, đóng Chrome, dựng cái mới.
+đúng một câu ấy. Treo cũng tính là chết: quá 45 giây thì cắt, đóng Chrome, dựng cái mới. Và lời
+trăng trối của nó — mấy dòng cuối trên stderr — được giữ lại để nói ra, vì "kết nối hỏng" một
+mình thì không bao giờ chỉ ra được vì sao.
 
 ## Bộ test
 

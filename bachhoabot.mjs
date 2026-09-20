@@ -45,14 +45,19 @@ export const MOST_LINKS = Number(process.env.BACHHOA_MOST_LINKS ?? 1);
 /**
  * Chụp mấy trang một lúc, và xếp hàng dài nhất bao nhiêu.
  *
- * Hai, không phải một: một trang chậm mất tới mười lăm giây, và nối đuôi nhau thì cái link thứ
- * ba trong một nhóm đang nói chuyện rôm rả phải đợi gần một phút. Cũng không phải mười: mỗi
- * trang là một Chrome đang vẽ, và con bot này ở chung máy với những thứ khác.
+ * Bốn, không phải một: một trang mất năm tới mười giây, và nối đuôi nhau thì cái link thứ tư
+ * trong một nhóm đang nói chuyện rôm rả phải đợi gần một phút. Mỗi lần chụp là một tab riêng
+ * trong cùng một Chrome, nên bốn tab cùng vẽ rẻ hơn hẳn bốn Chrome.
+ *
+ * Cũng không phải mười: **một tấm ảnh không nhanh lên vì có nhiều luồng.** Mở trang, dựng, cuộn,
+ * đợi ảnh về rồi chụp là một chuỗi việc nối tiếp nhau, và không khúc nào chạy trước khúc trước
+ * nó được. Nhiều luồng chỉ giúp *nhiều link* xong sớm hơn — còn một link thì nhanh lên nhờ bỏ
+ * bớt chỗ chờ thừa, không nhờ thêm luồng.
  *
  * Hàng đợi có trần, và khi đầy thì **bỏ cái cũ nhất** chứ không bỏ cái mới. Một con bot cặm cụi
  * trả nợ hàng đợi là con bot trả lời những câu không ai còn nhớ đã hỏi.
  */
-export const ORDERS = Number(process.env.BACHHOA_ORDERS ?? 2);
+export const ORDERS = Number(process.env.BACHHOA_ORDERS ?? 4);
 export const WAITING_MOST = Number(process.env.BACHHOA_WAITING ?? 12);
 
 /// Cắt một lần chụp ở đây, kể cả khi Chrome còn nói là nó đang làm. Trần trong `shot.mjs` lo
