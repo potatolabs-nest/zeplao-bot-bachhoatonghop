@@ -101,6 +101,18 @@ jobs:
         run: |
           manifest="gitops/apps/zeplao-bots/zeplao-bot-bachhoatonghop-resources/deployment.yaml"
 
+          # Bot mới thì chưa có manifest nào trong home-ops, và `sed` trên một file không có là
+          # cả job đỏ — đỏ vì một thứ chưa ai dựng, chứ không phải vì mã hỏng. Image vẫn đã dựng
+          # và đẩy lên registry xong ở bước trên, nên ở đây nói ra rồi đi tiếp.
+          #
+          # Không tự tạo manifest ở đây: con bot này cần **hai** container — nó và một Chrome —
+          # nên cái manifest đầu tiên là một quyết định về cụm, không phải một dòng `sed`.
+          if [ ! -f "$manifest" ]; then
+            echo "Chưa có $manifest trong home-ops."
+            echo "Image đã đẩy lên với thẻ ${IMAGE_TAG}; thêm manifest rồi lần đẩy sau sẽ tự cập nhật."
+            exit 0
+          fi
+
           sed -i -E \
             "s#(image: git\.potatolabs\.uk/zeplao/zeplao-bot-bachhoatonghop:).*#\1${IMAGE_TAG}#" \
             "$manifest"
