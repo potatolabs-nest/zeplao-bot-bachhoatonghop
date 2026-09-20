@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import { hextetsOf, isPrivateAddress, linksIn, vetHost, vetUrl } from './web/links.mjs';
 import { endpointFor, untilReady } from './web/shot.mjs';
-import { caption, fileName, hostOf, madeRecently, refusal } from './web/message.mjs';
+import { fileName, hostOf, madeRecently, refusal } from './web/message.mjs';
 
 // ---- tìm link ------------------------------------------------------------------------------
 
@@ -163,6 +163,16 @@ test('trang trống thật thì cũng có lúc phải chụp một trang trống
   assert.ok(tick.at >= 5000 && tick.at < 15000, `ở ${tick.at}ms`);
 });
 
+test('trang chưa đọc xong thì không phải trang trống — đợi tới trần', async () => {
+  // `github.com` có lúc còn `readyState: loading` ở giây thứ 5 với mạng im lìm. Bắn cửa thoát
+  // "trang trống" ở đó là gửi lên nhóm một tấm ảnh trắng của một trang hoàn toàn bình thường.
+  const marks = { beat: 0, painted: 0 };
+  const tick = clock();
+  const look = async () => (tick.at < 8000 ? -1 : 9);
+  assert.equal(await untilReady(marks, { ...tick, look, blankMs: 5000, paintedMs: 9999 }), 'lang');
+  assert.ok(tick.at >= 8000, `bỏ cuộc lúc trang mới đang đọc, ở ${tick.at}ms`);
+});
+
 test('trang không chữ nhưng có ảnh thì tính là có', async () => {
   const marks = { beat: 0, painted: 100 };
   const tick = clock();
@@ -217,30 +227,6 @@ test('Chrome không có ở đó thì nói ra, không im', async () => {
 });
 
 // ---- chữ đi kèm ----------------------------------------------------------------------------
-
-test('dưới ảnh là tiêu đề và tên miền', () => {
-  assert.equal(
-    caption({ title: 'Báo VnExpress', url: 'https://vnexpress.net/', asked: 'https://vnexpress.net/' }),
-    'Báo VnExpress · vnexpress.net',
-  );
-});
-
-test('chuyển hướng đi đâu thì nói ra', () => {
-  // Một ảnh chụp không kèm tên miền là thứ dùng để lừa người ta.
-  assert.equal(
-    caption({ title: 'Đăng nhập', url: 'https://cho-la.com/login', asked: 'https://bit.ly/abc' }),
-    'Đăng nhập · bit.ly → cho-la.com',
-  );
-});
-
-test('trang dài bị cắt thì nói ra', () => {
-  const said = caption({ title: 'A', url: 'https://a.vn/', asked: 'https://a.vn/', truncated: true });
-  assert.match(said, /ảnh cắt/);
-});
-
-test('không có tiêu đề thì còn tên miền', () => {
-  assert.equal(caption({ title: '', url: 'https://a.vn/x', asked: 'https://a.vn/x' }), 'a.vn');
-});
 
 test('tên file mang theo tên miền và ngày', () => {
   assert.equal(fileName('https://www.kuku.vn/bot', new Date('2026-09-20T03:00:00Z')), 'kuku.vn-2026-09-20.png');

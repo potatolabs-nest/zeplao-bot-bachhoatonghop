@@ -82,7 +82,7 @@ export const BLANK_MS = Number(process.env.SHOT_BLANK_MS ?? 5000);
  * đếm được một trang chỉ có mỗi tấm ảnh, hay một file PDF nhúng, mà không phải kể tên từng loại.
  */
 export const LOOK = `(() => {
-  if (!document.body) return 0;
+  if (!document.body) return -1;
   const w = innerWidth, h = innerHeight;
   let hits = 0;
   for (const x of [0.2, 0.5, 0.8]) {
@@ -91,7 +91,15 @@ export const LOOK = `(() => {
       if (stack.some((one) => one !== document.body && one !== document.documentElement)) hits += 1;
     }
   }
-  return hits;
+  if (hits > 0) return hits;
+  // Không thấy gì, và bây giờ mới hỏi vì sao: trang đọc xong rồi mà trống là **trống thật** (số
+  // 0), còn đang đọc dở thì là **chưa tới** (số âm). Hai cái ấy phải đi hai đường: \`github.com\`
+  // có lúc còn 'loading' ở giây thứ 5 với mạng im lìm, và bắn cửa thoát 'trang trống' ở đó là
+  // gửi lên nhóm một tấm ảnh trắng của một trang hoàn toàn bình thường.
+  //
+  // Hỏi sau khi đếm chứ không hỏi trước: một trang đang đọc dở mà đã vẽ ra nội dung thì chụp
+  // được rồi. Hỏi trước là mọi trang chậm đều phải ngồi hết trần mười lăm giây.
+  return document.readyState === 'loading' ? -1 : 0;
 })()`;
 
 /**
@@ -107,6 +115,20 @@ export const LOAD_MS = Number(process.env.SHOT_LOAD_MS ?? 15_000);
 /// Mạng lặng rồi vẫn đợi thêm chừng này cho chữ nhảy vào chỗ sau khi font về, và cho mấy khung
 /// dựng bằng JS kịp vẽ. Ngắn, vì phần chờ thật đã nằm ở `QUIET_MS` bên trên.
 export const SETTLE_MS = Number(process.env.SHOT_SETTLE_MS ?? 400);
+
+/**
+ * Chụp mấy màn hình.
+ *
+ * Hai, không phải một. Một màn hình đầu của gần như mọi trang bây giờ là logo, thanh điều hướng,
+ * một cái banner nhận cookie và đúng một cái tiêu đề — tức là ảnh chụp ra thứ ai cũng đoán được,
+ * còn cái người ta dán link để khoe thì nằm ngay dưới mép. Hai màn hình là qua khỏi phần trang
+ * trí và tới được phần nội dung.
+ *
+ * Không nhiều hơn, vì đây là ảnh trong khung chat: cao gấp ba là chữ nhỏ tới mức không đọc được
+ * trên điện thoại, và là một tấm ảnh chiếm cả màn hình người khác. Ai cần cả trang thì gõ
+ * `/anh dai`.
+ */
+export const PAGES = Number(process.env.SHOT_PAGES ?? 2);
 
 /// Chụp cả trang dài thì cắt ở đây. Một bài báo dài 20.000px thành một cái ảnh không ai đọc nổi
 /// trong khung chat, và gần như chắc chắn vượt 2 MB.
@@ -348,7 +370,8 @@ export async function launch({ bin = chromePath(), args = [] } = {}) {
  * được. `png` là Buffer, đã vừa trần 2 MB của nền tảng.
  */
 export async function shot(chrome, address, {
-  width = WIDTH, height = HEIGHT, fullPage = false, loadMs = LOAD_MS, settleMs = SETTLE_MS,
+  width = WIDTH, height = HEIGHT, fullPage = false, pages = PAGES,
+  loadMs = LOAD_MS, settleMs = SETTLE_MS,
   quietMs = QUIET_MS, leastMs = LEAST_MS, paintedMs = PAINTED_MS, blankMs = BLANK_MS,
   mostBytes = MOST_BYTES, vet = vetUrl,
 } = {}) {
@@ -454,17 +477,24 @@ export async function shot(chrome, address, {
     const title = await pageTitle(at);
     const url = await currentUrl(at, address);
 
-    let clip = { x: 0, y: 0, width, height, scale: 1 };
-    let truncated = false;
-    if (fullPage) {
-      const metrics = await at('Page.getLayoutMetrics');
-      const size = metrics.cssContentSize ?? metrics.contentSize ?? { width, height };
-      const tall = Math.max(height, Math.ceil(size.height));
-      truncated = tall > MOST_FULL_HEIGHT;
-      clip = { x: 0, y: 0, width, height: Math.min(tall, MOST_FULL_HEIGHT), scale: 1 };
-    }
+    // Cuộn xuống hết phần sắp chụp rồi mới chụp. Không cuộn thì nửa dưới tấm ảnh là một dãy ô
+    // xám: ảnh trên gần như mọi trang bây giờ chỉ tải khi trôi vào tầm mắt, và "tầm mắt" của
+    // trang là chỗ nó tưởng người ta đang nhìn — không phải vùng mình sắp chụp.
+    const want = fullPage ? MOST_FULL_HEIGHT : height * pages;
+    await scrollThrough(at, height, want);
+    await wait(settleMs);
 
-    const png = await fit(at, clip, mostBytes, fullPage);
+    const metrics = await at('Page.getLayoutMetrics');
+    const size = metrics.cssContentSize ?? metrics.contentSize ?? { width, height };
+    const tall = Math.max(height, Math.ceil(size.height));
+    // Trang ngắn hơn phần muốn chụp thì chụp đúng nó, không đệm thêm một khoảng trắng. Một tấm
+    // ảnh có nửa dưới trắng trơn trông y như trang bị lỗi.
+    const clip = { x: 0, y: 0, width, height: Math.min(tall, want), scale: 1 };
+    // Chỉ nói "cắt" cho `/anh dai`: ai xin cả trang mà không được cả trang thì cần biết. Còn ảnh
+    // hai màn hình thì vốn là xem trước, và ghi "còn nữa" dưới mỗi tấm là một dòng thừa mỗi lần.
+    const truncated = fullPage && tall > MOST_FULL_HEIGHT;
+
+    const png = await fit(at, clip, mostBytes, clip.height > height);
     return { png, title, url, truncated };
   } finally {
     for (const off of undo) off();
@@ -519,14 +549,38 @@ export async function untilReady(marks, {
     const at = now();
     const waited = at - began;
     if (waited >= loadMs) return 'het-gio';
-    sure = (await look()) > 0 ? sure + 1 : 0;
+    // Âm là "trang chưa đọc xong", không là "đọc xong rồi mà chẳng có gì", dương là có nội dung.
+    const seen = await look();
+    sure = seen > 0 ? sure + 1 : 0;
     const full = sure >= SURE;
     const quiet = waited >= leastMs && at - marks.beat >= quietMs;
     if (full && marks.painted && at - marks.painted >= paintedMs) return 've-xong';
     if (full && quiet) return 'lang';
-    if (!full && quiet && waited >= blankMs) return 'trang-trong';
+    // Chỉ chịu chụp một trang trống khi nó **đã đọc xong** và vẫn trống. Còn đang đọc thì đợi
+    // tới trần: chậm không phải là trống, và chụp cái chậm ra đúng một tấm ảnh trắng.
+    if (!full && seen === 0 && quiet && waited >= blankMs) return 'trang-trong';
     await pause(tick);
   }
+}
+
+/**
+ * Cuộn qua phần sắp chụp, rồi về đầu trang.
+ *
+ * Từng nấc một màn hình chứ không nhảy thẳng xuống đáy: trang nào cũng nghe sự kiện cuộn để
+ * quyết định tải ảnh nào, và một cú nhảy từ 0 xuống 4000 thì mọi thứ ở giữa không bao giờ đi qua
+ * tầm mắt. Về đầu trang ở cuối, vì đó là chỗ tấm ảnh bắt đầu.
+ */
+async function scrollThrough(at, step, want) {
+  const expression = `(async () => {
+    const pause = (ms) => new Promise((go) => setTimeout(go, ms));
+    for (let y = ${step}; y <= ${want}; y += ${step}) {
+      window.scrollTo(0, y);
+      await pause(120);
+    }
+    window.scrollTo(0, 0);
+    await pause(60);
+  })()`;
+  await at('Runtime.evaluate', { expression, awaitPromise: true, timeout: 8000 }).catch(() => {});
 }
 
 /**

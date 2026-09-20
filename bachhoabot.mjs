@@ -16,7 +16,7 @@ import { dirname } from 'node:path';
 
 import { linksIn, vetUrl } from './web/links.mjs';
 import { CHROME_URL, chromePath, open } from './web/shot.mjs';
-import { caption, fileName, greeting, help, madeRecently, refusal } from './web/message.mjs';
+import { fileName, help, madeRecently, refusal } from './web/message.mjs';
 
 /// Nơi nền tảng bot ở. Tên riêng, không phải `kuku.vn` — bot là mã của bên thứ ba, và giữ nó
 /// khỏi cái tên người ta đang dùng là thứ cho phép chặn, đo và dời nó mà không ai phải sửa gì.
@@ -65,7 +65,7 @@ export const SAME_MS = Number(process.env.BACHHOA_SAME_MS ?? 10 * 60 * 1000);
 export function commandsFor(me) {
   const name = String(me?.username ?? '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 32);
   const commands = [
-    { command: 'anh', description: 'Chụp một trang web: /anh https://… — !anh thì chỉ bạn thấy' },
+    { command: 'anh', description: 'Chụp hai màn hình đầu của một trang: /anh https://… — !anh thì chỉ bạn thấy' },
     { command: 'chup', description: 'Tên khác của /anh' },
     { command: 'xem', description: 'Tên khác của /anh' },
   ];
@@ -295,12 +295,10 @@ async function run(token) {
       offset = update.id;
       writeState(offset);
 
-      if (update.kind === 'bot_added') {
-        // Nói một câu lúc vào phòng, vì chế độ riêng tư nhìn từ trong phòng thì không thấy
-        // được: một con bot vừa thêm vào mà im thin thít trông y hệt một con bot hỏng.
-        jobs.add(() => say(update.membership.conversationId, { text: greeting(me.username) }));
-        continue;
-      }
+      // `bot_added` đi qua đây mà không nói gì. Nhiều bot chào một câu lúc vào phòng, vì chế độ
+      // riêng tư nhìn từ trong phòng thì không thấy được — nhưng con bot này được thêm vào để
+      // làm một việc im lặng, và một lời chào là tin nhắn đầu tiên nó gửi lại chẳng phải việc
+      // ấy. Ai cần biết nó làm gì thì gõ tên nó.
       if (update.kind !== 'message') continue;
 
       const message = update.message;
@@ -339,10 +337,14 @@ async function run(token) {
       return sorry(message, asked, `Không chụp được ${new URL(vetted.url).hostname}: ${problem.message}.`);
     }
 
-    const text = caption({ ...made, asked: vetted.url });
-    console.log(`${vetted.url} -> ${Math.round(made.png.byteLength / 1024)}KB, ${Date.now() - began}ms`);
+    console.log(`${vetted.url} -> ${Math.round(made.png.byteLength / 1024)}KB, ${Date.now() - began}ms · ${made.title}`);
+    // **Không có `text`.** Câu trả lời là tấm ảnh, và một dòng chữ dưới nó chỉ nói lại thứ trong
+    // ảnh đã có. Máy chủ không bắt buộc `text` khi có ảnh (`RefusedAsWritten` chỉ xét độ dài và
+    // bàn phím), dù tài liệu viết "required unless stickerId" — dòng ấy nói về tin nhắn chữ.
+    //
+    // Cái mất: một ảnh chụp không kèm tên miền thì link rút gọn dẫn đi đâu không ai thấy. Chỗ
+    // duy nhất còn giữ tên miền là tên file ảnh, và chỉ hiện ra lúc có người tải nó về.
     await say(message.conversationId, {
-      text,
       replyToMessageId: message.messageId,
       clientMessageId: stampFor(message.messageId, vetted.url),
       onlyForUserId: asked.onlyFor,

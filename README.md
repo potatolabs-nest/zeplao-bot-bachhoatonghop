@@ -1,15 +1,10 @@
 # bachhoabot
 
 Một con bot chụp ảnh trang web trong nhóm chat Cúc Cu. Ai dán một cái link, nó mở trang ấy bằng
-Chrome thật ở khổ màn hình máy tính, chụp lại, rồi gửi tấm ảnh lên nhóm kèm một dòng:
+Chrome thật ở khổ màn hình máy tính, cuộn xuống hai màn hình, chụp lại, rồi gửi tấm ảnh lên nhóm.
 
-```
-Báo VnExpress - Báo tiếng Việt nhiều người xem nhất · vnexpress.net
-[ảnh trang, 1280×800]
-```
-
-Một dòng, vì tấm ảnh đã nói trang ấy trông thế nào rồi. Thứ ảnh không nói được là nó **của ai** —
-nên dòng chữ chỉ có tiêu đề và tên miền, và nếu link dẫn đi nơi khác thì nó nói ra chỗ ấy.
+Chỉ tấm ảnh. Không có dòng chữ nào dưới nó, không có lời chào lúc được thêm vào nhóm, không một
+câu nào bot không được hỏi.
 
 ## Vì sao cần, khi ứng dụng đã có xem trước link
 
@@ -27,7 +22,7 @@ Hai thứ này không thay nhau. Chúng nằm cạnh nhau trong cùng một tin 
 | Gõ | Được gì |
 | --- | --- |
 | Dán một cái link vào nhóm | Bot chụp, không cần gõ gì thêm — **cần tắt chế độ riêng tư**, xem dưới |
-| `/anh https://…` | Chụp một trang, cả nhóm thấy |
+| `/anh https://…` | Chụp hai màn hình đầu, cả nhóm thấy |
 | `!anh https://…` | Như trên, chỉ người gõ thấy |
 | `/anh dai https://…` | Chụp cả trang dài, không chỉ màn hình đầu |
 | `@bachhoabot https://…` | Gọi tên, nếu ai quen lối ấy |
@@ -42,6 +37,47 @@ hai thì gõ `/anh` cho riêng nó.
 
 Cùng một link, cùng một phòng, trong **mười phút** thì bot không chụp lại. Người ta trả lời nhau,
 chuyển tiếp, dán nhầm hai lần — và ba tấm ảnh giống hệt nhau không nói thêm được gì.
+
+## Chụp bao nhiêu
+
+Hai màn hình — 1280×1600 — chứ không phải một.
+
+Một màn hình đầu của gần như mọi trang bây giờ là logo, thanh điều hướng, một cái banner nhận
+cookie và đúng một cái tiêu đề: ảnh chụp ra thứ ai cũng đoán được, còn cái người ta dán link để
+khoe thì nằm ngay dưới mép. Cũng không nhiều hơn hai, vì đây là ảnh trong khung chat — cao gấp
+ba là chữ nhỏ tới mức không đọc nổi trên điện thoại, và là một tấm ảnh chiếm cả màn hình người
+khác. Ai cần cả trang thì gõ `/anh dai`, cắt ở 4000px.
+
+Và phải **cuộn thật** trước khi chụp, từng nấc một màn hình rồi mới về đầu trang. Ảnh trên gần
+như mọi trang bây giờ chỉ tải khi trôi vào tầm mắt, mà "tầm mắt" của trang là chỗ nó tưởng người
+ta đang nhìn — không phải vùng bot sắp chụp. Không cuộn thì nửa dưới tấm ảnh là một dãy ô xám.
+Nhảy thẳng xuống đáy cũng không được: trang nghe sự kiện cuộn để quyết định tải ảnh nào, và một
+cú nhảy từ 0 xuống 4000 thì mọi thứ ở giữa không bao giờ đi qua tầm mắt.
+
+Trang ngắn hơn hai màn hình thì chụp đúng nó, không đệm thêm khoảng trắng: một tấm ảnh có nửa
+dưới trắng trơn trông y như trang bị lỗi.
+
+## Câu trả lời là tấm ảnh, và chỉ tấm ảnh
+
+Không có dòng chữ nào đi kèm. Đã có một dòng — tiêu đề với tên miền — rồi bỏ đi: nó nói lại thứ
+trong ảnh đã có, và một con bot nói thừa trong nhóm chat của người khác thì mỗi ngày nó nói thừa
+vài chục lần.
+
+Cái mất, nói thẳng ra: **một ảnh chụp không kèm tên miền thì link rút gọn dẫn đi đâu không ai
+thấy**. `bit.ly/abc` chuyển tới `cho-la.com` vẽ giao diện ngân hàng, và tấm ảnh trông y như thật.
+Chỗ duy nhất còn giữ tên miền là tên file ảnh (`cho-la.com-2026-09-20.png`), mà nó chỉ hiện ra
+lúc có người tải về. Ai đổi ý thì `caption` nằm trong lịch sử git.
+
+Tài liệu nền tảng viết `text` là bắt buộc "unless `stickerId` is set". Không đúng cho tin có ảnh:
+`RefusedAsWritten` trong `server/Zeplao.Api/BotApi.cs` chỉ xét độ dài và bàn phím, không hề đòi
+`text`. Dòng ấy nói về tin nhắn chữ.
+
+Lúc được thêm vào nhóm bot cũng **không chào**. Nhiều bot chào một câu, vì chế độ riêng tư nhìn
+từ trong phòng thì không thấy được — nhưng con bot này được thêm vào để làm một việc im lặng, và
+một lời chào là tin nhắn đầu tiên nó gửi lại chẳng phải việc ấy. Ai cần biết nó làm gì thì gõ tên
+nó.
+
+Chữ chỉ còn cho hai lúc: không chụp được, và có người hỏi nó làm được gì.
 
 ## Chế độ riêng tư, và vì sao nó là quyết định chịu lực
 
@@ -104,6 +140,15 @@ Và một đường về không ai muốn: trang **vẫn trống** sau 5 giây m
 trống, có ghi một dòng cảnh báo vào log. Có trang trống thật, và bắt nó phải có gì đó là đợi hết
 trần rồi mới chụp đúng cái đã thấy từ giây đầu.
 
+Nhưng cửa thoát ấy chỉ mở cho trang **đã đọc xong** mà vẫn trống. Trang còn `loading` thì không
+phải trống, nó là **chưa tới** — và `github.com` có lúc còn `loading` ở giây thứ 5 với mạng im
+lìm, nên bắn cửa thoát ở đó là gửi lên nhóm một tấm ảnh trắng của một trang hoàn toàn bình
+thường. Ba trong bốn lượt đo bị đúng cái đó.
+
+Thứ tự trong phép đo ấy cũng phải đúng: **đếm nội dung trước, hỏi `readyState` sau**. Hỏi trước
+thì một trang đang đọc dở mà đã vẽ xong nội dung vẫn bị coi là chưa tới, và mọi trang chậm đều
+phải ngồi hết trần mười lăm giây.
+
 Đo sau khi sửa, bốn lượt liền: `example.com` 1,5 giây · `kuku.vn/bot/doc` 2,1–3,9 ·
 `wikipedia` 2,8 · `news.ycombinator.com` 3,6 · `vnexpress.net` 4,2 · `24h.com.vn` 4,7 ·
 `github.com` 5,9–13,5. Lượt nào cũng ra đúng trang — `github.com` chậm vì khoảng trắng của nó
@@ -142,7 +187,8 @@ dùng chung cookie, localStorage hay cache.
 
 ## Ảnh, và trần 2 MB
 
-Nền tảng nhận nhiều nhất 2 MB một ảnh, và chỉ nhận PNG hoặc SVG — không có đường JPEG để nén cho
+Ảnh hai màn hình của một trang báo nặng chừng 0,9–1,3 MB. Nền tảng nhận nhiều nhất 2 MB một ảnh,
+và chỉ nhận PNG hoặc SVG — không có đường JPEG để nén cho
 nhỏ. Thứ đổi được là số điểm ảnh, nên bot chụp rồi cân, quá trần thì thu nhỏ dần: 1 → 0,8 → 0,65
 → 0,5 → 0,4. Thu dần chứ không thu thẳng xuống đáy, vì gần hết các trang vừa ngay từ lần đầu và
 một ảnh 1280 đọc được chữ thì hơn hẳn một ảnh 640 chắc chắn vừa.
@@ -213,6 +259,7 @@ hoặc `CHROME_URL` trỏ vào một cái ở chỗ khác. Không cần `npm ins
 | `ZEPLAO_BOT_API` | Nền tảng bot. Mặc định `https://api-bot.kuku.vn` |
 | `BACHHOA_STATE` | File nhớ đã đọc tới đâu. Mặc định `data/state.json` |
 | `SHOT_WIDTH`, `SHOT_HEIGHT` | Khổ màn hình. Mặc định 1280×800 |
+| `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 2 |
 | `SHOT_QUIET_MS`, `SHOT_PAINTED_MS`, `SHOT_BLANK_MS`, `SHOT_LOAD_MS` | Bốn cái mốc ở mục "Chụp lúc nào" (700 · 3000 · 5000 · 15000) |
 | `BACHHOA_ORDERS`, `BACHHOA_WAITING` | Chụp mấy trang một lúc (2), hàng đợi dài nhất (12) |
 | `BACHHOA_SAME_MS` | Cùng link cùng phòng thì bao lâu mới chụp lại. Mặc định 10 phút |
