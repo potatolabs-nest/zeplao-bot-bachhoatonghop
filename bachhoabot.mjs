@@ -15,7 +15,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { linksIn, vetUrl } from './web/links.mjs';
-import { chromePath, launch } from './web/shot.mjs';
+import { CHROME_URL, chromePath, open } from './web/shot.mjs';
 import { caption, fileName, greeting, help, madeRecently, refusal } from './web/message.mjs';
 
 /// Nơi nền tảng bot ở. Tên riêng, không phải `kuku.vn` — bot là mã của bên thứ ba, và giữ nó
@@ -167,12 +167,12 @@ export function writeState(offset, file = STATE) {
  * đi lúc ba giờ sáng. Không có chỗ này thì cái chết ấy im lặng và vĩnh viễn: mọi câu trả lời sau
  * đó đều là "không mở được trang", và log chỉ nói đúng một câu ấy.
  */
-export function keeper(open = launch, { ms = SHOT_MS } = {}) {
+export function keeper(start = open, { ms = SHOT_MS } = {}) {
   let browser = null;
   return {
     async shot(address, options) {
       for (let attempt = 0; attempt < 2; attempt++) {
-        browser ??= await open();
+        browser ??= await start();
         // Đồng hồ đếm ngược phải **huỷ được**. Một `setTimeout` 45 giây bỏ lại sau mỗi lần chụp
         // là 45 giây tiến trình không chịu thoát khi có người gõ Ctrl-C — và trong bộ test thì
         // nó là một lần chạy treo cứng không rõ vì sao.
@@ -258,7 +258,7 @@ async function run(token) {
   }
 
   const me = await call('getMe');
-  console.log(`@${me.username} đang nghe · Chrome ở ${chromePath()}`);
+  console.log(`@${me.username} đang nghe · Chrome ở ${CHROME_URL ?? chromePath()}`);
 
   await call('setCommands', { commands: commandsFor(me) }).catch((problem) => {
     // Khai lệnh hỏng thì bot vẫn nghe được `@tên` và — nếu chủ bot đã tắt chế độ riêng tư — vẫn
@@ -401,10 +401,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.error('Chưa có ZEPLAO_BOT_TOKEN. Tạo bot ở https://kuku.vn/bot rồi đặt biến này.');
     process.exit(2);
   }
-  if (!chromePath()) {
+  if (!CHROME_URL && !chromePath()) {
     // Ngã ở đây, không ngã ở cái link đầu tiên có người dán. Một con bot khởi động được rồi mới
     // hỏng là một con bot trông như đang chạy.
-    console.error('Không tìm thấy Chrome. Cài chromium, hoặc đặt CHROME_PATH.');
+    console.error('Không tìm thấy Chrome. Cài chromium, đặt CHROME_PATH, hoặc trỏ CHROME_URL vào một Chrome có sẵn.');
     process.exit(2);
   }
   await run(token);

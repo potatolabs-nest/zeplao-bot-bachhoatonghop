@@ -1,0 +1,34 @@
+# Hai container: con bot, và một Chrome cho nó mượn.
+#
+#   ZEPLAO_BOT_TOKEN=... docker compose up -d
+#
+# Chrome nằm riêng vì nó **709 MiB** còn con bot thì 5 file — nhốt chung là mỗi lần sửa một dòng
+# mã phải dựng lại gần một gigabyte. Xem đầu `Dockerfile`.
+services:
+  chrome:
+    image: zenika/alpine-chrome
+    restart: unless-stopped
+    # `--no-sandbox` vì trong container Chrome không dựng được sandbox của nó nếu không có
+    # `SYS_ADMIN`. Đổi lại, container này **không mở cổng ra ngoài**: chỉ mạng nội bộ của compose
+    # tới được nó. Một cổng gỡ lỗi Chrome mở ra internet là toàn quyền đọc ghi mọi trang nó mở.
+    command:
+      - --no-sandbox
+      - --disable-gpu
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+    expose:
+      - "9222"
+
+  bot:
+    image: git.potatolabs.uk/zeplao/zeplao-bot-bachhoatonghop
+    restart: unless-stopped
+    depends_on:
+      - chrome
+    environment:
+      ZEPLAO_BOT_TOKEN: ${ZEPLAO_BOT_TOKEN:?chưa có token, tạo bot ở https://kuku.vn/bot}
+      CHROME_URL: http://chrome:9222
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:

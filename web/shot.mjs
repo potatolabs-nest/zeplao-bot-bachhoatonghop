@@ -123,6 +123,15 @@ const PLACES = [
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
 ];
 
+/**
+ * Chrome ở sẵn một chỗ khác, thay vì bật một cái ở đây.
+ *
+ * `http://chrome:9222` (hỏi `/json/version` để lấy địa chỉ ws) hoặc thẳng `ws://…`. Đặt biến này
+ * thì image của bot không cần chứa trình duyệt nào cả — và trình duyệt là **709 MiB** trong số
+ * 828 MiB của image trước đó, tức là gần như toàn bộ. Máy dựng image hết chỗ chính vì con số ấy.
+ */
+export const CHROME_URL = process.env.CHROME_URL ?? null;
+
 export function chromePath() {
   for (const place of PLACES) {
     if (place && existsSync(place)) return place;
@@ -240,6 +249,54 @@ function flags(dir, extra = []) {
 }
 
 /**
+ * Lấy một trình duyệt: nối vào cái có sẵn nếu được chỉ chỗ, không thì tự bật một cái.
+ *
+ * Chỗ gọi không cần biết là cái nào. Khác nhau đúng hai điều, và cả hai nằm gọn ở đây: cái tự
+ * bật thì đóng là **giết**, cái nối vào thì đóng chỉ là cúp máy — nó không phải của mình; và cờ
+ * khởi động chỉ đặt được cho cái tự bật, nên mọi thứ thật sự quan trọng (khổ màn hình, user
+ * agent, thanh cuộn) đều đặt lại cho **từng trang** trong `shot`, không đặt bằng cờ.
+ */
+export async function open({ url = CHROME_URL, bin, args } = {}) {
+  return url ? connect(url) : launch({ bin, args });
+}
+
+/**
+ * Địa chỉ WebSocket của một Chrome ở sẵn.
+ *
+ * `ws://…` thì đã là nó rồi. `http://chrome:9222` thì phải hỏi `/json/version` — cổng gỡ lỗi cho
+ * mỗi lần chạy một đường dẫn có chuỗi ngẫu nhiên, nên không đoán được và không viết cứng được.
+ *
+ * Tách ra khỏi `connect` để thử được mà không cần một Chrome thật đứng đó.
+ */
+export async function endpointFor(where, { ask = fetch } = {}) {
+  const given = String(where ?? '').trim();
+  if (!given) throw new Error('CHROME_URL rỗng');
+  if (/^wss?:\/\//i.test(given)) return given;
+
+  const answer = await ask(new URL('/json/version', given));
+  if (!answer.ok) throw new Error(`${given} trả lời ${answer.status}`);
+  const found = (await answer.json())?.webSocketDebuggerUrl;
+  if (!found) throw new Error(`${given} không nói địa chỉ WebSocket`);
+  return found;
+}
+
+/** Nối vào một Chrome đang chạy sẵn ở đâu đó. */
+export async function connect(where) {
+  const chrome = talk(await socketTo(await endpointFor(where)));
+  // Không giết, chỉ cúp máy: Chrome ấy là của người khác, và có thể đang vẽ trang cho ai đó.
+  return { chrome, close: () => chrome.close(), shot: (url, options) => shot(chrome, url, options) };
+}
+
+async function socketTo(endpoint) {
+  const socket = new WebSocket(endpoint);
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve;
+    socket.onerror = () => reject(new Error(`không nối được vào Chrome ở ${endpoint}`));
+  });
+  return socket;
+}
+
+/**
  * Bật Chrome lên và giữ nó chạy.
  *
  * Một tiến trình cho cả đời con bot, nhưng **mỗi lần chụp một hồ sơ riêng** (`createBrowserContext`):
@@ -268,12 +325,7 @@ export async function launch({ bin = chromePath(), args = [] } = {}) {
     child.once('exit', (code) => { clearTimeout(giveUp); reject(new Error(`Chrome tắt ngay, mã ${code}:\n${log.slice(-500)}`)); });
   });
 
-  const socket = new WebSocket(endpoint);
-  await new Promise((resolve, reject) => {
-    socket.onopen = resolve;
-    socket.onerror = () => reject(new Error('không nối được vào Chrome'));
-  });
-  const chrome = talk(socket);
+  const chrome = talk(await socketTo(endpoint));
 
   let closed = false;
   const close = () => {
@@ -375,6 +427,9 @@ export async function shot(chrome, address, {
       width, height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: height,
     });
     await at('Emulation.setUserAgentOverride', { userAgent: UA, acceptLanguage: 'vi-VN,vi;q=0.9,en;q=0.8' });
+    // Đặt ở đây chứ không bằng cờ `--hide-scrollbars`, vì cờ chỉ đặt được cho Chrome do mình bật
+    // — nối vào Chrome của người khác thì mọi ảnh dính một thanh cuộn xám bên phải.
+    await at('Emulation.setScrollbarsHidden', { hidden: true }).catch(() => {});
 
     marks.beat = Date.now();
     const went = await at('Page.navigate', { url: address });

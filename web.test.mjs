@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { hextetsOf, isPrivateAddress, linksIn, vetHost, vetUrl } from './web/links.mjs';
-import { untilReady } from './web/shot.mjs';
+import { endpointFor, untilReady } from './web/shot.mjs';
 import { caption, fileName, hostOf, madeRecently, refusal } from './web/message.mjs';
 
 // ---- tìm link ------------------------------------------------------------------------------
@@ -187,6 +187,33 @@ test('trang không bao giờ xong và không bao giờ vẽ thì cũng có lúc 
   const tick = clock((at) => { marks.beat = at; });
   assert.equal(await untilReady(marks, { ...tick, loadMs: 15000 }), 'het-gio');
   assert.equal(tick.at, 15000);
+});
+
+// ---- nối vào Chrome có sẵn -------------------------------------------------------------------
+
+test('ws:// thì đã là địa chỉ rồi, không hỏi thêm ai', async () => {
+  const ask = async () => assert.fail('không được hỏi');
+  assert.equal(await endpointFor('ws://chrome:9222/devtools/browser/abc', { ask }), 'ws://chrome:9222/devtools/browser/abc');
+});
+
+test('http:// thì phải hỏi /json/version', async () => {
+  // Đường dẫn ấy có một chuỗi ngẫu nhiên mỗi lần Chrome chạy, nên không viết cứng được.
+  let asked = null;
+  const ask = async (url) => {
+    asked = String(url);
+    return { ok: true, json: async () => ({ webSocketDebuggerUrl: 'ws://chrome:9222/devtools/browser/xyz' }) };
+  };
+  assert.equal(await endpointFor('http://chrome:9222', { ask }), 'ws://chrome:9222/devtools/browser/xyz');
+  assert.equal(asked, 'http://chrome:9222/json/version');
+});
+
+test('Chrome không có ở đó thì nói ra, không im', async () => {
+  const ask = async () => ({ ok: false, status: 502 });
+  await assert.rejects(endpointFor('http://chrome:9222', { ask }), /502/);
+
+  const empty = async () => ({ ok: true, json: async () => ({}) });
+  await assert.rejects(endpointFor('http://chrome:9222', { ask: empty }), /không nói địa chỉ/);
+  await assert.rejects(endpointFor('', { ask }), /rỗng/);
 });
 
 // ---- chữ đi kèm ----------------------------------------------------------------------------

@@ -153,32 +153,64 @@ khung chat, và gần như chắc chắn vượt trần.
 Mỗi tin nhắn kèm một `clientMessageId` dựng từ id tin nhắn và địa chỉ, nên gửi lại sau một cú 429
 hay một lần mạng đứt không làm ra tấm ảnh thứ hai trong phòng.
 
+## Chrome nằm ở container riêng
+
+Lúc đầu Chromium nằm ngay trong image của bot — một container, `docker run` một dòng là chạy. Nó
+hỏng, và hỏng theo kiểu tốn nhất: `apk add` tải về và cài xong hết 828 MiB, rồi ngã ở dòng cuối
+cùng lúc ghi layer, `no space left on device`, sau đúng năm mươi giây.
+
+Đo lại thì cái sàn không lay chuyển được:
+
+| | Cỡ cài đặt |
+| --- | --- |
+| `chromium` một mình | **709,5 MiB** |
+| + bộ font tối thiểu (dejavu, liberation, noto-emoji) | 734,3 MiB |
+| + thêm CJK | 823,1 MiB |
+| Bộ font ban đầu (noto, noto-cjk, freefont) | 828,4 MiB |
+
+Cắt font xuống mức tối thiểu chỉ được 94 MiB. 709 MiB kia là chính Chromium, và không có cách nào
+làm một trình duyệt nhỏ đi.
+
+Nên Chrome ra ở ngoài. Image của bot về lại đúng cỡ một con bot — Node và năm file — và dựng
+trong vài giây; còn trình duyệt thành một container sẵn có, dùng chung được cho nhiều bot và nâng
+cấp riêng khỏi bot. Cái giá là phải trông hai container thay vì một, và đó là cái giá đúng: mỗi
+lần sửa một dòng mã mà phải dựng lại gần một gigabyte là một lần không ai muốn sửa gì nữa.
+
+`CHROME_URL` trỏ vào nó. Không đặt thì bot tự bật một Chrome trên máy như cũ — hai đường cùng đi
+qua `open()` trong [`web/shot.mjs`](web/shot.mjs), và chỗ gọi không cần biết là đường nào. Khác
+nhau đúng hai điều: cái tự bật thì đóng là giết, cái nối vào thì đóng chỉ là cúp máy; và cờ khởi
+động chỉ đặt được cho cái tự bật, nên khổ màn hình, user agent và thanh cuộn đều đặt lại cho từng
+trang chứ không đặt bằng cờ.
+
+> ⚠️ Cổng 9222 của Chrome là **toàn quyền** trên mọi trang nó mở. Đừng mở nó ra ngoài mạng nội
+> bộ. `compose.yaml` dùng `expose`, không dùng `ports`, đúng vì thế.
+
 ## Chạy thế nào
 
 Tạo bot ở [kuku.vn/bot](https://kuku.vn/bot), lấy token, rồi:
 
 ```sh
+ZEPLAO_BOT_TOKEN=... docker compose up -d
+```
+
+`compose.yaml` dựng cả hai: con bot và một `zenika/alpine-chrome` cạnh nó.
+
+Chạy trần trên máy mình, dùng Chrome sẵn có trong máy:
+
+```sh
 ZEPLAO_BOT_TOKEN=... node bachhoabot.mjs
 ```
 
-Cần **Node 22 trở lên** (dùng `WebSocket` có sẵn) và một bản Chrome hoặc Chromium trên máy. Không
-cần `npm install`: repo không phụ thuộc gói nào.
-
-Bằng Docker thì Chromium và font đã nằm sẵn trong image:
-
-```sh
-docker run -d --name bachhoabot --restart unless-stopped \
-  -e ZEPLAO_BOT_TOKEN=<token> \
-  -v bachhoabot-data:/app/data \
-  git.potatolabs.uk/zeplao/zeplao-bot-bachhoatonghop
-```
+Cần **Node 22 trở lên** (dùng `WebSocket` có sẵn), và một bản Chrome hoặc Chromium trên máy —
+hoặc `CHROME_URL` trỏ vào một cái ở chỗ khác. Không cần `npm install`: repo không phụ thuộc gói nào.
 
 | Biến | |
 | --- | --- |
 | `ZEPLAO_BOT_TOKEN` | Bắt buộc |
+| `CHROME_URL` | `http://chrome:9222` — nối vào Chrome có sẵn thay vì tự bật một cái |
+| `CHROME_PATH` | Chỗ Chrome nằm, nếu tự bật mà nó không nằm ở chỗ thường |
+| `CHROME_NO_SANDBOX` | `1` để tắt sandbox — **chỉ khi tự bật Chrome bên trong container** |
 | `ZEPLAO_BOT_API` | Nền tảng bot. Mặc định `https://api-bot.kuku.vn` |
-| `CHROME_PATH` | Chỗ Chrome nằm, nếu không nằm ở chỗ thường |
-| `CHROME_NO_SANDBOX` | `1` để tắt sandbox — **chỉ trong container** |
 | `BACHHOA_STATE` | File nhớ đã đọc tới đâu. Mặc định `data/state.json` |
 | `SHOT_WIDTH`, `SHOT_HEIGHT` | Khổ màn hình. Mặc định 1280×800 |
 | `SHOT_QUIET_MS`, `SHOT_PAINTED_MS`, `SHOT_BLANK_MS`, `SHOT_LOAD_MS` | Bốn cái mốc ở mục "Chụp lúc nào" (700 · 3000 · 5000 · 15000) |
@@ -220,6 +252,7 @@ người khác.
 | [`web/links.mjs`](web/links.mjs) | Tìm link trong một câu, và cái cửa xét địa chỉ |
 | [`web/shot.mjs`](web/shot.mjs) | Chrome qua CDP: bật, mở trang, đợi, chụp, thu cho vừa trần |
 | [`web/message.mjs`](web/message.mjs) | Chữ đi kèm ảnh, và trí nhớ mười phút |
+| [`compose.yaml`](compose.yaml) | Hai container: con bot, và một Chrome cho nó mượn |
 | [`bachhoabot.test.mjs`](bachhoabot.test.mjs), [`web.test.mjs`](web.test.mjs) | Hai nửa, hai bộ test |
 
 Luật tìm link chép đúng luật của chính ứng dụng (`client/src/chat-logic.ts`, `linksIn`), không
