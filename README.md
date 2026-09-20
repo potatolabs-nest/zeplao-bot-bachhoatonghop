@@ -1,7 +1,7 @@
 # bachhoabot
 
 Một con bot chụp ảnh trang web trong nhóm chat Cúc Cu. Ai dán một cái link, nó mở trang ấy bằng
-Chrome thật ở khổ màn hình máy tính, cuộn xuống tám màn hình, chụp lại, rồi gửi tấm ảnh lên nhóm.
+Chrome thật ở khổ màn hình máy tính, cuộn xuống sáu màn hình, chụp lại, rồi gửi tấm ảnh lên nhóm.
 
 Chỉ tấm ảnh. Không có dòng chữ nào dưới nó, không có lời chào lúc được thêm vào nhóm, không một
 câu nào bot không được hỏi.
@@ -22,7 +22,7 @@ Hai thứ này không thay nhau. Chúng nằm cạnh nhau trong cùng một tin 
 | Gõ | Được gì |
 | --- | --- |
 | Dán một cái link vào nhóm | Bot chụp, không cần gõ gì thêm — **cần tắt chế độ riêng tư**, xem dưới |
-| `/anh https://…` | Chụp tám màn hình đầu, cả nhóm thấy |
+| `/anh https://…` | Chụp sáu màn hình đầu, cả nhóm thấy |
 | `!anh https://…` | Như trên, chỉ người gõ thấy |
 | `/anh dai https://…` | Chụp cả trang dài, không chỉ màn hình đầu |
 | `@bachhoabot https://…` | Gọi tên, nếu ai quen lối ấy |
@@ -40,15 +40,15 @@ chuyển tiếp, dán nhầm hai lần — và ba tấm ảnh giống hệt nhau
 
 ## Chụp bao nhiêu
 
-Tám màn hình — 1280×6400 — và **không bao giờ hơn**.
+Sáu màn hình — 1280×4800 — và **không bao giờ hơn**.
 
 Một màn hình đầu của gần như mọi trang bây giờ là logo, thanh điều hướng, một cái banner nhận
 cookie và đúng một cái tiêu đề: ảnh chụp ra thứ ai cũng đoán được, còn cái người ta dán link để
 khoe thì nằm dưới mép.
 
-Cái trần cứng ở tám thì không phải chuyện gu. Rất nhiều trang **tự nạp thêm khi cuộn xuống**:
+Cái trần cứng ở sáu thì không phải chuyện gu. Rất nhiều trang **tự nạp thêm khi cuộn xuống**:
 không có trần thì bot cuộn, trang dài ra, bot cuộn tiếp, và tấm ảnh lớn lên tới khi nào trang ấy
-hết bài — tức là không bao giờ. Trang ngắn hơn tám màn hình thì chụp đúng nó, không đệm thêm
+hết bài — tức là không bao giờ. Trang ngắn hơn sáu màn hình thì chụp đúng nó, không đệm thêm
 khoảng trắng: nửa dưới trắng trơn trông y như trang bị lỗi.
 
 ### Cuộn chậm, đợi ở đáy, rồi hỏi lại
@@ -81,17 +81,17 @@ một thôi, vì trang tự nạp bài thì lượt nào cũng thấy nó cao l�
 
 Đo chiều cao **trước** khi cuộn lượt đầu, không bắt đầu từ 0 — bắt đầu từ 0 thì trang một khung
 cũng tính là "đã cao lên", và mọi trang ngắn đều đi thừa một lượt. Và chỉ cuộn tới đáy trang
-*hiện có*: cuộn xuống 6400 của một trang cao 800 là mười lăm nấc đi qua chỗ trống. Hai chỗ ấy đưa
+*hiện có*: cuộn xuống 4800 của một trang cao 800 là mười nấc đi qua chỗ trống. Hai chỗ ấy đưa
 `example.com` từ 4,9 giây xuống **2,0**.
 
 ### Dọn lớp che
 
-Banner "chấp nhận cookie" dính đáy màn hình là thứ hỏng nặng nhất với một tấm ảnh tám màn hình:
+Banner "chấp nhận cookie" dính đáy màn hình là thứ hỏng nặng nhất với một tấm ảnh sáu màn hình:
 nó nằm nguyên ở đáy khung chụp và ăn mất cả một dải ngang. Trang nào khoá cuộn sau cái banner ấy
 thì ảnh chỉ còn mỗi nó.
 
 Cách hiển nhiên là chụp 80% mỗi màn hình rồi ghép — nhưng thế là bỏ đi gần một nghìn điểm ảnh
-nội dung **thật** trên tám màn hình, mỗi lần chụp, kể cả những trang chẳng có banner nào; mà
+nội dung **thật** trên sáu màn hình, mỗi lần chụp, kể cả những trang chẳng có banner nào; mà
 banner cao hơn 20% thì vẫn lọt vào. Chữa cái nhìn thấy chứ không chữa cái gây ra.
 
 Nên dọn thẳng: mọi thứ `position: fixed` mà **dính đáy và rộng quá nửa khung**, hoặc **phủ quá
@@ -263,9 +263,9 @@ SVG bọc một tấm JPEG cũng bị chặn có chủ ý: `href="data:"` nằm 
 
 ### Nhẹ và đọc được: chọn một
 
-Ở tám màn hình thì hai cái đó không đi cùng nhau, và đây là chỗ phép nhân quyết định chứ không
-phải ý thích: 1280×6400 là **8,2 triệu điểm ảnh**. Ép xuống 900 KB thì `vnexpress.net` ra
-**544px ngang**, và ở cỡ ấy chữ tiếng Việt có dấu thành một vệt xám — một tấm ảnh nhẹ mà không
+Quá một mức thì hai cái đó không đi cùng nhau, và phép nhân quyết định chứ không phải ý thích.
+Thử tám màn hình — 1280×6400, **8,2 triệu điểm ảnh** — rồi ép xuống 900 KB thì `vnexpress.net`
+ra **544px ngang**, và ở cỡ ấy chữ tiếng Việt có dấu thành một vệt xám. Một tấm ảnh nhẹ mà không
 đọc được thì nhẹ để làm gì.
 
 Nên `AIM_BYTES` là cái **nhắm tới**, không phải cái phải đạt bằng mọi giá, và `LEAST_SCALE` là
@@ -273,20 +273,22 @@ Nên `AIM_BYTES` là cái **nhắm tới**, không phải cái phải đạt b�
 phép đẩy xuống dưới sàn: trần gói của socket — chữ nhỏ khó đọc còn hơn đứt kết nối rồi không có
 ảnh nào.
 
-Đo tám màn hình:
+Sáu màn hình là chỗ hai thứ ấy còn ngồi cạnh nhau được. Đo:
 
 | | Cỡ ảnh | Cỡ file | Tỉ lệ | Thời gian |
 | --- | --- | --- | --- | --- |
-| `example.com` | 1280×800 | 17 KB | 1,00 | 2,1s |
-| `news.ycombinator.com` | 1280×1217 | 277 KB | 1,00 | 3,1s |
-| `kuku.vn/bot/doc` | 1101×5504 | 865 KB | 0,86 | 3,4s |
-| `theguardian.com` | 934×4672 | 608 KB | 0,73 | 6,1s |
-| `24h.com.vn` | 640×3200 | 858 KB | 0,50 | 10,5s |
-| `bbc.com/news` | 640×3069 | 1018 KB | 0,50 | 9,1s |
-| `vnexpress.net` | 640×3200 | 1326 KB | 0,50 | 11,5s |
+| `example.com` | 1280×800 | 17 KB | 1,00 | 1,9s |
+| `news.ycombinator.com` | 1280×1217 | 273 KB | 1,00 | 6,0s |
+| `theguardian.com` | 1280×4800 | 384 KB | 1,00 | 6,3s |
+| `kuku.vn/bot/doc` | 1280×4800 | 792 KB | 1,00 | 3,8s |
+| `24h.com.vn` | 640×2400 | 796 KB | 0,50 | 14,0s |
+| `vnexpress.net` | 640×2400 | 806 KB | 0,50 | 11,3s |
+| `cafef.vn` | 640×2400 | 930 KB | 0,50 | 9,4s |
+| `bbc.com/news` | 653×2448 | 973 KB | 0,51 | 9,5s |
 
-Trang chữ giữ nguyên 1280px và không bị đụng tới. Trang ảnh mới chạm sàn — và đó cũng đúng là
-loại trang mà thu nhỏ ít mất mát nhất.
+Trang chữ giữ nguyên 1280px và không bị đụng tới — ở sáu màn hình thì cả `theguardian.com` lẫn
+`kuku.vn` đều còn nguyên độ nét. Chỉ trang nhiều ảnh mới chạm sàn, và đó cũng đúng là loại trang
+mà thu nhỏ ít mất mát nhất.
 
 Mỗi tin nhắn kèm một `clientMessageId` dựng từ id tin nhắn và địa chỉ, nên gửi lại sau một cú 429
 hay một lần mạng đứt không làm ra tấm ảnh thứ hai trong phòng.
@@ -351,7 +353,7 @@ hoặc `CHROME_URL` trỏ vào một cái ở chỗ khác. Không cần `npm ins
 | `ZEPLAO_BOT_API` | Nền tảng bot. Mặc định `https://api-bot.kuku.vn` |
 | `BACHHOA_STATE` | File nhớ đã đọc tới đâu. Mặc định `data/state.json` |
 | `SHOT_WIDTH`, `SHOT_HEIGHT` | Khổ màn hình. Mặc định 1280×800 |
-| `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 8 |
+| `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 6 |
 | `SHOT_AIM_BYTES`, `SHOT_LEAST_SCALE` | Cỡ file nhắm tới (900 KB) và sàn thu nhỏ (0,5). Sàn thắng |
 | `SHOT_SAFE_BYTES` | Trần cho một gói CDP (2,6 MB). Vượt là đứt socket |
 | `SHOT_DWELL_MS`, `SHOT_SCROLLED_MS` | Dừng lâu nhất ở mỗi nấc cuộn (400ms), đợi ảnh về ở đáy (4,5s) |

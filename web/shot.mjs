@@ -144,7 +144,7 @@ export const DWELL_MS = Number(process.env.SHOT_DWELL_MS ?? 400);
  * trên điện thoại, và là một tấm ảnh chiếm cả màn hình người khác. Ai cần cả trang thì gõ
  * `/anh dai`.
  */
-export const PAGES = Number(process.env.SHOT_PAGES ?? 8);
+export const PAGES = Number(process.env.SHOT_PAGES ?? 6);
 
 /// Chụp cả trang dài thì cắt ở đây. Một bài báo dài 20.000px thành một cái ảnh không ai đọc nổi
 /// trong khung chat.
