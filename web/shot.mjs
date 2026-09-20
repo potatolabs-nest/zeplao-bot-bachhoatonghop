@@ -144,7 +144,7 @@ export const DWELL_MS = Number(process.env.SHOT_DWELL_MS ?? 400);
  * trên điện thoại, và là một tấm ảnh chiếm cả màn hình người khác. Ai cần cả trang thì gõ
  * `/anh dai`.
  */
-export const PAGES = Number(process.env.SHOT_PAGES ?? 6);
+export const PAGES = Number(process.env.SHOT_PAGES ?? 8);
 
 /// Chụp cả trang dài thì cắt ở đây. Một bài báo dài 20.000px thành một cái ảnh không ai đọc nổi
 /// trong khung chat.
@@ -161,8 +161,17 @@ export const MOST_FULL_HEIGHT = Number(process.env.SHOT_FULL_HEIGHT ?? 8000);
  * `BotApi.cs`). Nên "nén" ở đây là thu nhỏ, và thu bao nhiêu thì đo mà ra, xem `fit`.
  */
 export const AIM_BYTES = Number(process.env.SHOT_AIM_BYTES ?? 900_000);
-/// Thu nhỏ tới đây là hết: dưới nữa thì chữ trên ảnh không còn đọc được, mà một tấm ảnh nhẹ
-/// không đọc được thì nhẹ để làm gì. Trừ một chỗ — xem `SAFE_BYTES`.
+/**
+ * Sàn thu nhỏ, và nó là **sàn thật**.
+ *
+ * `AIM_BYTES` là cái nhắm tới, không phải cái phải đạt bằng mọi giá. Tám màn hình của một trang
+ * báo là 8,2 triệu điểm ảnh; ép nó xuống 900 KB thì `vnexpress.net` ra **544px ngang**, và ở cỡ
+ * ấy chữ tiếng Việt có dấu thành một vệt xám — một tấm ảnh nhẹ mà không đọc được thì nhẹ để làm
+ * gì. Nên trang nào chạm sàn thì nặng hơn cái nhắm tới, và thế là đúng.
+ *
+ * Chỉ một thứ được phép đẩy xuống dưới sàn này: `SAFE_BYTES`. Chữ nhỏ khó đọc còn hơn đứt socket
+ * rồi không có ảnh nào.
+ */
 export const LEAST_SCALE = Number(process.env.SHOT_LEAST_SCALE ?? 0.5);
 
 /**
@@ -824,8 +833,9 @@ export async function fit(at, clip, {
   let made = { png: await snap(clip.height, scale), scale };
   if (made.png.byteLength <= most) {
     if (made.png.byteLength <= aim) return made;
-    // Ước lượng trật về phía nặng. Sửa bằng số thật, đúng một lần nữa.
-    const next = Math.max(least * 0.7, scale * Math.sqrt(aim / made.png.byteLength));
+    // Ước lượng trật về phía nặng. Sửa bằng số thật, đúng một lần nữa — nhưng không xuống dưới
+    // sàn: quá `aim` mà đọc được thì hơn là vừa `aim` mà không.
+    const next = Math.max(least, scale * Math.sqrt(aim / made.png.byteLength));
     if (next < scale - 0.04) made = { png: await snap(clip.height, next), scale: next };
     if (made.png.byteLength <= most) return made;
   }
