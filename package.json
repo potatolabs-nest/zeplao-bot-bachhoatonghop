@@ -1,0 +1,14 @@
+{
+  "name": "zeplao-bot-bachhoatonghop",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bot chụp ảnh trang web cho Cúc Cu — dán link vào nhóm, nhận lại ảnh trang ấy ở khổ màn hình máy tính",
+  "scripts": {
+    "start": "node bachhoabot.mjs",
+    "test": "node --test --test-concurrency=1 bachhoabot.test.mjs web.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

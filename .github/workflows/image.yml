@@ -1,0 +1,119 @@
+# Dựng image và đẩy lên ghcr, mỗi lần `main` đổi.
+#
+# Bộ test chạy **trước** khi dựng, và đó là cả lý do việc này ở CI chứ không ở `Dockerfile`: một
+# image dựng xong từ mã đỏ là một image trông y hệt image tốt, và nó sẽ nằm đó với thẻ `latest`
+# cho tới khi có người chạy nó.
+name: image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: image-${{ forgejo.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: git.potatolabs.uk
+  IMAGE_NAME: zeplao/zeplao-bot-bachhoatonghop
+  CONTAINER_HOST: unix:///var/run/docker.sock
+
+jobs:
+  image:
+    runs-on: linux-amd64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Không `npm ci`: repo không phụ thuộc gói nào, nên không có gì để cài.
+      - run: npm test
+
+      - name: Install Podman client
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends podman ca-certificates
+
+      - name: Build image
+        id: build
+        uses: redhat-actions/buildah-build@v3
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: |
+            sha-${{ forgejo.sha }}
+            latest
+          containerfiles: |
+            ./Dockerfile
+          context: .
+          squash: false
+          labels: |
+            org.opencontainers.image.source=${{ forgejo.server_url }}/${{ forgejo.repository }}
+            org.opencontainers.image.revision=${{ forgejo.sha }}
+
+      - name: Push image
+        uses: redhat-actions/push-to-registry@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+          remote: true
+
+      - name: Cleanup local image
+        if: ${{ always() }}
+        run: |
+          echo "Storage before cleanup:"
+          podman --remote system df || true
+
+          # Remove every local version of this application image.
+          podman --remote image ls \
+            --quiet \
+            --no-trunc \
+            "localhost/${IMAGE_NAME}" |
+            sort -u |
+            while read -r image_id; do
+              test -n "$image_id" || continue
+              podman --remote image rm --force "$image_id"
+            done
+
+          # Remove dangling layers and build cache.
+          podman --remote system prune --force
+
+          echo "Storage after cleanup:"
+          podman --remote system df || true
+
+      - name: Checkout home-ops
+        uses: actions/checkout@v7
+        with:
+          repository: homelabs/home-ops
+          ref: main
+          token: ${{ secrets.REGISTRY_TOKEN }}
+          path: home-ops
+
+      - name: Deploy through home-ops
+        working-directory: home-ops
+        env:
+          IMAGE_TAG: sha-${{ forgejo.sha }}
+        run: |
+          manifest="gitops/apps/zeplao-bots/zeplao-bot-bachhoatonghop-resources/deployment.yaml"
+
+          sed -i -E \
+            "s#(image: git\.potatolabs\.uk/zeplao/zeplao-bot-bachhoatonghop:).*#\1${IMAGE_TAG}#" \
+            "$manifest"
+
+          if git diff --quiet -- "$manifest"; then
+            echo "Image tag is already ${IMAGE_TAG}"
+            exit 0
+          fi
+
+          git config user.name "Deploy Bot"
+          git config user.email "deploy-bot@potatolabs.uk"
+
+          git add "$manifest"
+          git commit -m "deploy(zeplao-bot-bachhoatonghop): ${IMAGE_TAG}"
+          git push origin HEAD:main
+

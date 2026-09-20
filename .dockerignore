@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+data
+.env
+git-connect
+*.test.mjs
+README.md
+Dockerfile
+.dockerignore
