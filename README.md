@@ -281,34 +281,38 @@ Không có đường nén nào khác ngoài giảm điểm ảnh. Nền tảng c
 SVG bọc một tấm JPEG cũng bị chặn có chủ ý: `href="data:"` nằm trong regex `UnsafeSvg` của
 `BotApi.cs`.
 
-### Nhẹ và đọc được: chọn một
+### Sắc nét tới đâu, và vì sao không hơn được
 
-Quá một mức thì hai cái đó không đi cùng nhau, và phép nhân quyết định chứ không phải ý thích.
-Thử tám màn hình — 1280×6400, **8,2 triệu điểm ảnh** — rồi ép xuống 900 KB thì `vnexpress.net`
-ra **544px ngang**, và ở cỡ ấy chữ tiếng Việt có dấu thành một vệt xám. Một tấm ảnh nhẹ mà không
-đọc được thì nhẹ để làm gì.
+Thu nhỏ là **mờ**: tỉ lệ 0,5 biến bản dựng 1280px thành 640px, rồi khung chat kéo giãn nó ra lại
+— chữ nhoè, ảnh bệt. Nên sàn là **0,7**, giữ 896px.
 
-Nên `AIM_BYTES` là cái **nhắm tới**, không phải cái phải đạt bằng mọi giá, và `LEAST_SCALE` là
-**sàn thật**. Trang nào chạm sàn thì nặng hơn cái nhắm tới, và thế là đúng. Chỉ một thứ được
-phép đẩy xuống dưới sàn: trần gói của socket — chữ nhỏ khó đọc còn hơn đứt kết nối rồi không có
-ảnh nào.
+Không hơn được, và đây là chỗ đo ra chứ không đoán: cho `AIM_BYTES` lên 9 MB thì `vnexpress.net`
+sáu màn hình **vẫn** dừng ở tỉ lệ 0,67, vì trần gói của socket chặn. Muốn 1280px sắc nguyên thì
+tấm PNG phải nặng chừng 3,4 MB — quá cả trần 2 MB của nền tảng. Và không có đường vòng: nền tảng
+không nhận JPEG, còn SVG bọc một tấm JPEG thì bị chặn có chủ ý (`href="data:"` nằm trong regex
+`UnsafeSvg` của `BotApi.cs`). Với trang nhiều ảnh, **858–896px là sắc nét nhất có thể**.
 
-Sáu màn hình là chỗ hai thứ ấy còn ngồi cạnh nhau được. Đo:
+`AIM_BYTES` vì thế là cái *nhắm tới*, không phải cái phải đạt bằng mọi giá: trang nào chạm sàn
+thì nặng hơn mục tiêu, và thế là đúng. Chỉ một thứ được phép đẩy xuống dưới sàn — trần gói của
+socket, vì chữ nhỏ khó đọc còn hơn đứt kết nối rồi không có ảnh nào.
+
+Đo sáu màn hình:
 
 | | Cỡ ảnh | Cỡ file | Tỉ lệ | Thời gian |
 | --- | --- | --- | --- | --- |
-| `example.com` | 1280×800 | 17 KB | 1,00 | 1,9s |
-| `news.ycombinator.com` | 1280×1217 | 273 KB | 1,00 | 6,0s |
-| `theguardian.com` | 1280×4800 | 384 KB | 1,00 | 6,3s |
-| `kuku.vn/bot/doc` | 1280×4800 | 792 KB | 1,00 | 3,8s |
-| `24h.com.vn` | 640×2400 | 796 KB | 0,50 | 14,0s |
-| `vnexpress.net` | 640×2400 | 806 KB | 0,50 | 11,3s |
-| `cafef.vn` | 640×2400 | 930 KB | 0,50 | 9,4s |
-| `bbc.com/news` | 653×2448 | 973 KB | 0,51 | 9,5s |
+| `news.ycombinator.com` | 1280×1217 | 274 KB | 1,00 | 3,8s |
+| `theguardian.com` | 1280×4800 | 363 KB | 1,00 | 4,8s |
+| `kuku.vn/bot/doc` | 1280×4800 | 802 KB | 1,00 | 3,6s |
+| `24h.com.vn` | 896×3360 | 1411 KB | 0,70 | 9,5s |
+| `bbc.com/news` | 934×3504 | 1691 KB | 0,73 | 9,9s |
+| `vnexpress.net` | 896×3360 | 1734 KB | 0,70 | 11,6s |
 
-Trang chữ giữ nguyên 1280px và không bị đụng tới — ở sáu màn hình thì cả `theguardian.com` lẫn
-`kuku.vn` đều còn nguyên độ nét. Chỉ trang nhiều ảnh mới chạm sàn, và đó cũng đúng là loại trang
-mà thu nhỏ ít mất mát nhất.
+Trang chữ giữ nguyên 1280px và không bị đụng tới — `theguardian.com` với `kuku.vn` còn nguyên
+độ nét ở cả sáu màn hình. Chỉ trang nhiều ảnh mới chạm sàn.
+
+Ba thứ — **số màn hình, độ nét, cỡ file** — kéo nhau, và trần 2 MB của nền tảng là sợi dây. Bớt
+màn hình thì hai cái kia rộng ra ngay: ở bốn màn hình, `vnexpress.net` lên tỉ lệ 0,83 và
+`bbc.com` về nguyên 1,00. Đổi bằng một biến: `SHOT_PAGES=4`.
 
 Mỗi tin nhắn kèm một `clientMessageId` dựng từ id tin nhắn và địa chỉ, nên gửi lại sau một cú 429
 hay một lần mạng đứt không làm ra tấm ảnh thứ hai trong phòng.
@@ -374,7 +378,7 @@ hoặc `CHROME_URL` trỏ vào một cái ở chỗ khác. Không cần `npm ins
 | `BACHHOA_STATE` | File nhớ đã đọc tới đâu. Mặc định `data/state.json` |
 | `SHOT_WIDTH`, `SHOT_HEIGHT` | Khổ màn hình. Mặc định 1280×800 |
 | `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 6 |
-| `SHOT_AIM_BYTES`, `SHOT_LEAST_SCALE` | Cỡ file nhắm tới (900 KB) và sàn thu nhỏ (0,5). Sàn thắng |
+| `SHOT_AIM_BYTES`, `SHOT_LEAST_SCALE` | Cỡ file nhắm tới (1,6 MB) và sàn thu nhỏ (0,7). Sàn thắng |
 | `SHOT_SAFE_BYTES` | Trần cho một gói CDP (2,6 MB). Vượt là đứt socket |
 | `SHOT_DWELL_MS`, `SHOT_SCROLLED_MS` | Dừng lâu nhất ở mỗi nấc cuộn (400ms), đợi ảnh về ở đáy (4,5s) |
 | `SHOT_GROW_BY` | Trang được tự đẻ chừng này trong một lượt cuộn rồi thôi (800px) |

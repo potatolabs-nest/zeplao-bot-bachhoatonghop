@@ -168,19 +168,23 @@ export const MOST_FULL_HEIGHT = Number(process.env.SHOT_FULL_HEIGHT ?? 8000);
  * và SVG bọc một tấm JPEG cũng bị chặn có chủ ý (`href="data:"` nằm trong regex `UnsafeSvg` của
  * `BotApi.cs`). Nên "nén" ở đây là thu nhỏ, và thu bao nhiêu thì đo mà ra, xem `fit`.
  */
-export const AIM_BYTES = Number(process.env.SHOT_AIM_BYTES ?? 900_000);
+export const AIM_BYTES = Number(process.env.SHOT_AIM_BYTES ?? 1_600_000);
 /**
  * Sàn thu nhỏ, và nó là **sàn thật**.
  *
- * `AIM_BYTES` là cái nhắm tới, không phải cái phải đạt bằng mọi giá. Tám màn hình của một trang
- * báo là 8,2 triệu điểm ảnh; ép nó xuống 900 KB thì `vnexpress.net` ra **544px ngang**, và ở cỡ
- * ấy chữ tiếng Việt có dấu thành một vệt xám — một tấm ảnh nhẹ mà không đọc được thì nhẹ để làm
- * gì. Nên trang nào chạm sàn thì nặng hơn cái nhắm tới, và thế là đúng.
+ * `AIM_BYTES` là cái nhắm tới, không phải cái phải đạt bằng mọi giá. Thu nhỏ là **mờ**: tỉ lệ
+ * 0,5 biến bản dựng 1280px thành 640px, và trong khung chat thì nó bị kéo giãn ra lại — chữ nhoè,
+ * ảnh bệt. Sàn 0,7 giữ 896px, là chỗ gần nhất với cái trần vật lý còn tới được.
+ *
+ * Cái trần vật lý ấy đo ra chứ không đoán: cho `aim` lên 9 MB thì `vnexpress.net` sáu màn hình
+ * **vẫn** dừng ở tỉ lệ 0,67, vì `SAFE_BYTES` chặn. Muốn 1280px sắc nguyên thì PNG phải nặng
+ * chừng 3,4 MB — quá trần 2 MB của nền tảng. Không có đường nào khác: nền tảng không nhận JPEG,
+ * và SVG bọc JPEG bị chặn có chủ ý. Nên với trang nhiều ảnh, 858–896px **là** sắc nét nhất.
  *
  * Chỉ một thứ được phép đẩy xuống dưới sàn này: `SAFE_BYTES`. Chữ nhỏ khó đọc còn hơn đứt socket
  * rồi không có ảnh nào.
  */
-export const LEAST_SCALE = Number(process.env.SHOT_LEAST_SCALE ?? 0.5);
+export const LEAST_SCALE = Number(process.env.SHOT_LEAST_SCALE ?? 0.7);
 
 /**
  * Trần cho **một gói CDP**, và nó là một cái trần vật lý chứ không phải một lựa chọn.
