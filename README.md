@@ -281,38 +281,61 @@ Không có đường nén nào khác ngoài giảm điểm ảnh. Nền tảng c
 SVG bọc một tấm JPEG cũng bị chặn có chủ ý: `href="data:"` nằm trong regex `UnsafeSvg` của
 `BotApi.cs`.
 
-### Sắc nét tới đâu, và vì sao không hơn được
+### Nặng bao nhiêu, nét bao nhiêu
 
-Thu nhỏ là **mờ**: tỉ lệ 0,5 biến bản dựng 1280px thành 640px, rồi khung chat kéo giãn nó ra lại
-— chữ nhoè, ảnh bệt. Nên sàn là **0,7**, giữ 896px.
+Trần là **1 MB**, không phải 2 MB của nền tảng. Nền tảng nhận tới 2 MB, nhưng 2 MB là quá nặng
+cho một tin nhắn: người ta đang ngồi 4G trong quán, và một tấm ảnh bot **tự** gửi vào giữa cuộc
+nói chuyện thì không ai chọn tải nó cả. Quá trần thì thu nhỏ tiếp, kể cả phải đi xuống dưới sàn
+— nặng quá thì không ai xem, mờ thì ít ra còn xem được.
 
-Không hơn được, và đây là chỗ đo ra chứ không đoán: cho `AIM_BYTES` lên 9 MB thì `vnexpress.net`
-sáu màn hình **vẫn** dừng ở tỉ lệ 0,67, vì trần gói của socket chặn. Muốn 1280px sắc nguyên thì
-tấm PNG phải nặng chừng 3,4 MB — quá cả trần 2 MB của nền tảng. Và không có đường vòng: nền tảng
-không nhận JPEG, còn SVG bọc một tấm JPEG thì bị chặn có chủ ý (`href="data:"` nằm trong regex
-`UnsafeSvg` của `BotApi.cs`). Với trang nhiều ảnh, **858–896px là sắc nét nhất có thể**.
+Sàn thu nhỏ để 0,5, và con số ấy **đã thử nâng lên 0,7 rồi hạ lại** — chỗ ấy đáng ghi. Nâng sàn
+đưa `vnexpress.net` từ 640px lên 896px và **không ai thấy khác**: khung chat vẽ ảnh theo bề ngang
+bong bóng, chừng 300–400px trên điện thoại, nên cả hai đều bị thu lại bằng nhau ở đúng chỗ người
+ta nhìn. Đổi lại file từ 860 KB thành 1,73 MB — gấp đôi, cho một thứ chỉ hiện ra khi có người bấm
+phóng to.
 
-`AIM_BYTES` vì thế là cái *nhắm tới*, không phải cái phải đạt bằng mọi giá: trang nào chạm sàn
-thì nặng hơn mục tiêu, và thế là đúng. Chỉ một thứ được phép đẩy xuống dưới sàn — trần gói của
-socket, vì chữ nhỏ khó đọc còn hơn đứt kết nối rồi không có ảnh nào.
+Mà 1280px sắc nguyên thì vốn cũng không tới được: cho `AIM_BYTES` lên 9 MB, `vnexpress.net` sáu
+màn hình **vẫn** dừng ở 0,67 vì trần gói của socket chặn, và PNG 1280px của nó nặng chừng 3,4 MB
+— quá cả trần 2 MB của nền tảng. Nền tảng không nhận JPEG, SVG bọc JPEG bị chặn có chủ ý. Nên lựa
+chọn thật chỉ là giữa 640px và 896px, và trong khung chat thì hai cái ấy như nhau.
 
 Đo sáu màn hình:
 
 | | Cỡ ảnh | Cỡ file | Tỉ lệ | Thời gian |
 | --- | --- | --- | --- | --- |
-| `news.ycombinator.com` | 1280×1217 | 274 KB | 1,00 | 3,8s |
-| `theguardian.com` | 1280×4800 | 363 KB | 1,00 | 4,8s |
-| `kuku.vn/bot/doc` | 1280×4800 | 802 KB | 1,00 | 3,6s |
-| `24h.com.vn` | 896×3360 | 1411 KB | 0,70 | 9,5s |
-| `bbc.com/news` | 934×3504 | 1691 KB | 0,73 | 9,9s |
-| `vnexpress.net` | 896×3360 | 1734 KB | 0,70 | 11,6s |
+| `example.com` | 1280×800 | 17 KB | 1,00 | 2,5s |
+| `news.ycombinator.com` | 1280×1217 | 268 KB | 1,00 | 11,0s |
+| `theguardian.com` | 1280×4800 | 359 KB | 1,00 | 4,6s |
+| `kuku.vn/bot/doc` | 1267×4752 | 805 KB | 0,99 | 3,5s |
+| `24h.com.vn` | 640×2400 | 809 KB | 0,50 | 6,1s |
+| `vnexpress.net` | 576×2160 | 823 KB | 0,45 | 11,5s |
+| `bbc.com/news` | 781×2928 | 862 KB | 0,61 | 8,4s |
 
-Trang chữ giữ nguyên 1280px và không bị đụng tới — `theguardian.com` với `kuku.vn` còn nguyên
-độ nét ở cả sáu màn hình. Chỉ trang nhiều ảnh mới chạm sàn.
+Trang chữ giữ nguyên 1280px và không bị đụng tới. Chỉ trang nhiều ảnh mới phải thu.
 
-Ba thứ — **số màn hình, độ nét, cỡ file** — kéo nhau, và trần 2 MB của nền tảng là sợi dây. Bớt
-màn hình thì hai cái kia rộng ra ngay: ở bốn màn hình, `vnexpress.net` lên tỉ lệ 0,83 và
-`bbc.com` về nguyên 1,00. Đổi bằng một biến: `SHOT_PAGES=4`.
+### Một khung cao 800px không phải một trang ngắn
+
+Cái bẫy đắt nhất trong cả repo, và nó quay lại ba lần dưới ba bộ mặt khác nhau.
+
+`theguardian.com` có lúc ở lại trạng thái **cả tài liệu cao đúng 800px** tới mười tám giây —
+đúng bằng khung nhìn, vì cái `<html>` rỗng nào cũng cao chừng ấy. `untilReady` cho qua, vì trong
+khung nhìn *có* vẽ: nó vẽ cái khung xương. Cuộn xuống thì cuộn vào chỗ không có gì. Chụp ra
+**11 KB**: một khung trắng, và log ghi là thành công.
+
+Chữa bằng cách đợi mạng im thì sai, và đo mới thấy vì sao. Hai trang, cùng ở giây thứ 2:
+
+| | `readyState` | cao | mạng im |
+| --- | --- | --- | --- |
+| `theguardian.com` (chưa xong) | `loading` | 800 | 241ms |
+| `example.com` (ngắn thật) | `complete` | 800 | 1495ms |
+
+Mạng im **không nói được gì** — cả hai đều im, và trang ngắn thật còn im lâu hơn. `readyState`
+thì nói: `loading` nghĩa là còn đang đọc dở, và hai giây sau nó cao 1200, bốn giây sau 11801.
+Nên luật là: cao đúng một khung **và** còn `loading` thì đợi; `complete` rồi mà vẫn một khung thì
+đó là trang ngắn thật, đi tiếp ngay.
+
+Bật `SHOT_TRACE=1` thì mỗi lần chụp in ra một dòng ghi từng khúc chờ mất bao lâu. Ba mươi giây
+cho một trang trắng là chuyện có thật, và câu hỏi duy nhất đáng hỏi lúc ấy là khúc nào.
 
 Mỗi tin nhắn kèm một `clientMessageId` dựng từ id tin nhắn và địa chỉ, nên gửi lại sau một cú 429
 hay một lần mạng đứt không làm ra tấm ảnh thứ hai trong phòng.
@@ -378,7 +401,9 @@ hoặc `CHROME_URL` trỏ vào một cái ở chỗ khác. Không cần `npm ins
 | `BACHHOA_STATE` | File nhớ đã đọc tới đâu. Mặc định `data/state.json` |
 | `SHOT_WIDTH`, `SHOT_HEIGHT` | Khổ màn hình. Mặc định 1280×800 |
 | `SHOT_PAGES` | Chụp mấy màn hình. Mặc định 6 |
-| `SHOT_AIM_BYTES`, `SHOT_LEAST_SCALE` | Cỡ file nhắm tới (1,6 MB) và sàn thu nhỏ (0,7). Sàn thắng |
+| `SHOT_AIM_BYTES`, `SHOT_MOST_BYTES` | Cỡ file nhắm tới (900 KB) và trần cứng (1 MB) |
+| `SHOT_LEAST_SCALE` | Sàn thu nhỏ (0,5). Chỉ trần cứng và trần socket mới đẩy được xuống dưới |
+| `SHOT_TRACE` | `1` để in dấu vết thời gian từng khúc của mỗi lần chụp |
 | `SHOT_SAFE_BYTES` | Trần cho một gói CDP (2,6 MB). Vượt là đứt socket |
 | `SHOT_DWELL_MS`, `SHOT_SCROLLED_MS` | Dừng lâu nhất ở mỗi nấc cuộn (400ms), đợi ảnh về ở đáy (4,5s) |
 | `SHOT_GROW_BY` | Trang được tự đẻ chừng này trong một lượt cuộn rồi thôi (800px) |

@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { hextetsOf, isPrivateAddress, linksIn, vetHost, vetUrl } from './web/links.mjs';
-import { endpointFor, untilReady, untilStill } from './web/shot.mjs';
+import { endpointFor, untilReady, untilStill, untilTall } from './web/shot.mjs';
 import { fileName, hostOf, madeRecently, refusal } from './web/message.mjs';
 
 // ---- tìm link ------------------------------------------------------------------------------
@@ -212,6 +212,34 @@ test('trang bận mãi thì cũng thôi, không đợi hết đời', async () =
   const tick = clock((at) => { marks.beat = at; });
   assert.equal(await untilStill(marks, { ...tick, mostMs: 6000 }), 'het-gio');
   assert.equal(tick.at, 6000);
+});
+
+test('trang cao đúng một khung mà còn đang đọc thì đợi, không chụp', async () => {
+  // theguardian.com ở lại trạng thái ấy tới mười tám giây; chụp lúc đó ra 11 KB một khung trắng.
+  const marks = { beat: 0 };
+  const tick = clock();
+  const look = async () => (tick.at < 3000 ? { tall: 800, loading: true } : { tall: 11801, loading: true });
+  assert.equal(await untilTall(null, marks, { ...tick, look, height: 800 }), 11801);
+  assert.ok(tick.at >= 3000, `bỏ cuộc quá sớm, ở ${tick.at}ms`);
+});
+
+test('trang ngắn thật thì đừng bắt nó đợi', async () => {
+  // example.com: `complete` ngay, cao 800 mãi mãi, và tới lúc này mạng đã im được một lúc —
+  // `marks.beat` nằm ở quá khứ. Mạng im **một mình** thì không phân biệt được hai ca này; phải
+  // có cả `loading: false` đi kèm.
+  const marks = { beat: -2000 };
+  const tick = clock();
+  const look = async () => ({ tall: 800, loading: false });
+  assert.equal(await untilTall(null, marks, { ...tick, look, height: 800, quietMs: 700 }), 800);
+  assert.equal(tick.at, 0, `đợi thừa tới ${tick.at}ms`);
+});
+
+test('đọc xong mà vẫn một khung với mạng còn chạy thì vẫn đợi, rồi cũng thôi', async () => {
+  const marks = { beat: 0 };
+  const tick = clock((at) => { marks.beat = at; });
+  const look = async () => ({ tall: 800, loading: false });
+  assert.equal(await untilTall(null, marks, { ...tick, look, height: 800, mostMs: 9000 }), 800);
+  assert.equal(tick.at, 9000);
 });
 
 // ---- nối vào Chrome có sẵn -------------------------------------------------------------------

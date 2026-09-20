@@ -27,9 +27,17 @@ export const HEIGHT = Number(process.env.SHOT_HEIGHT ?? 800);
 export const UA = process.env.SHOT_UA
   ?? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 
-/// Trần ảnh của nền tảng: 2 MB sau khi giải base64 (`BotImages.MaxBytes`). Cắt ở 1,9 MB để còn
-/// chỗ cho sai số, vì vượt trần là `400 bot_image_size` — mất cả công mở trang.
-export const MOST_BYTES = 1_900_000;
+/**
+ * Trần cứng cho tấm ảnh gửi đi. **1 MB, không phải 2 MB của nền tảng.**
+ *
+ * Nền tảng nhận tới 2 MB (`BotImages.MaxBytes`), nhưng 2 MB là quá nặng cho một tin nhắn: người
+ * ta đang ngồi 4G trong quán, và một tấm ảnh bot **tự** gửi vào giữa cuộc nói chuyện thì không
+ * ai chọn tải nó cả.
+ *
+ * Khác `AIM_BYTES` ở chỗ đây là trần chứ không phải đích: quá nó thì thu nhỏ tiếp, kể cả phải đi
+ * xuống dưới `LEAST_SCALE`. Nặng quá thì không ai xem; mờ thì ít ra còn xem được.
+ */
+export const MOST_BYTES = Number(process.env.SHOT_MOST_BYTES ?? 1_000_000);
 
 /**
  * Bao giờ thì chụp.
@@ -140,6 +148,9 @@ export const DWELL_MS = Number(process.env.SHOT_DWELL_MS ?? 400);
  */
 export const GROW_BY = Number(process.env.SHOT_GROW_BY ?? HEIGHT);
 
+/// Bật `SHOT_TRACE=1` để mỗi lần chụp in ra một dòng: khúc nào mất bao lâu.
+const TRACE = process.env.SHOT_TRACE === '1';
+
 /**
  * Chụp mấy màn hình.
  *
@@ -168,23 +179,26 @@ export const MOST_FULL_HEIGHT = Number(process.env.SHOT_FULL_HEIGHT ?? 8000);
  * và SVG bọc một tấm JPEG cũng bị chặn có chủ ý (`href="data:"` nằm trong regex `UnsafeSvg` của
  * `BotApi.cs`). Nên "nén" ở đây là thu nhỏ, và thu bao nhiêu thì đo mà ra, xem `fit`.
  */
-export const AIM_BYTES = Number(process.env.SHOT_AIM_BYTES ?? 1_600_000);
+export const AIM_BYTES = Number(process.env.SHOT_AIM_BYTES ?? 900_000);
 /**
  * Sàn thu nhỏ, và nó là **sàn thật**.
  *
- * `AIM_BYTES` là cái nhắm tới, không phải cái phải đạt bằng mọi giá. Thu nhỏ là **mờ**: tỉ lệ
- * 0,5 biến bản dựng 1280px thành 640px, và trong khung chat thì nó bị kéo giãn ra lại — chữ nhoè,
- * ảnh bệt. Sàn 0,7 giữ 896px, là chỗ gần nhất với cái trần vật lý còn tới được.
+ * 0,5, và con số này đã thử nâng rồi hạ lại — chỗ ấy đáng ghi.
  *
- * Cái trần vật lý ấy đo ra chứ không đoán: cho `aim` lên 9 MB thì `vnexpress.net` sáu màn hình
- * **vẫn** dừng ở tỉ lệ 0,67, vì `SAFE_BYTES` chặn. Muốn 1280px sắc nguyên thì PNG phải nặng
- * chừng 3,4 MB — quá trần 2 MB của nền tảng. Không có đường nào khác: nền tảng không nhận JPEG,
- * và SVG bọc JPEG bị chặn có chủ ý. Nên với trang nhiều ảnh, 858–896px **là** sắc nét nhất.
+ * Nâng sàn lên 0,7 đưa `vnexpress.net` từ 640px lên 896px, **và không ai thấy khác**: khung chat
+ * vẽ ảnh theo bề ngang bong bóng, chừng 300–400px trên điện thoại, nên cả hai đều bị thu lại
+ * bằng nhau ở đúng chỗ người ta nhìn. Đổi lại file từ 860 KB thành 1,73 MB — gấp đôi, cho một
+ * thứ chỉ hiện ra khi có người bấm phóng to.
+ *
+ * Mà 1280px sắc nguyên thì vốn cũng không tới được: cho `AIM_BYTES` lên 9 MB, `vnexpress.net`
+ * sáu màn hình **vẫn** dừng ở 0,67 vì `SAFE_BYTES` chặn, và PNG 1280px của nó nặng chừng 3,4 MB
+ * — quá trần 2 MB của nền tảng. Nền tảng không nhận JPEG, SVG bọc JPEG bị chặn có chủ ý. Nên
+ * lựa chọn thật chỉ là giữa 640px và 896px, và ở trong khung chat thì hai cái ấy như nhau.
  *
  * Chỉ một thứ được phép đẩy xuống dưới sàn này: `SAFE_BYTES`. Chữ nhỏ khó đọc còn hơn đứt socket
  * rồi không có ảnh nào.
  */
-export const LEAST_SCALE = Number(process.env.SHOT_LEAST_SCALE ?? 0.7);
+export const LEAST_SCALE = Number(process.env.SHOT_LEAST_SCALE ?? 0.5);
 
 /**
  * Trần cho **một gói CDP**, và nó là một cái trần vật lý chứ không phải một lựa chọn.
@@ -464,6 +478,12 @@ export async function shot(chrome, address, {
   quietMs = QUIET_MS, leastMs = LEAST_MS, paintedMs = PAINTED_MS, blankMs = BLANK_MS,
   scrolledMs = SCROLLED_MS, aimBytes = AIM_BYTES, mostBytes = MOST_BYTES, vet = vetUrl,
 } = {}) {
+  // Dấu vết thời gian, bật bằng `SHOT_TRACE=1`. Một lần chụp là năm sáu khúc chờ nối nhau, và
+  // khi nó mất ba mươi giây thì câu hỏi duy nhất đáng hỏi là khúc nào.
+  const began = Date.now();
+  const marked = [];
+  const mark = (what) => { if (TRACE) marked.push(`${what} ${Date.now() - began}ms`); };
+
   const contextId = (await chrome.send('Target.createBrowserContext', { disposeOnDetach: false })).browserContextId;
   let targetId = null;
   const undo = [];
@@ -560,6 +580,7 @@ export async function shot(chrome, address, {
         }
       },
     });
+    mark(`san-sang(${how})`);
     if (how === 'trang-trong') console.warn(`${address}: trang vẫn trống sau ${blankMs}ms, chụp thế`);
     await wait(settleMs);
 
@@ -588,7 +609,8 @@ export async function shot(chrome, address, {
     // Đo **trước** khi cuộn, không bắt đầu từ 0: bắt đầu từ 0 thì trang một khung cũng tính là
     // "đã cao lên", và mọi trang ngắn đều phải đi thừa cả một lượt cuộn nữa cho một chỗ không
     // có gì. `example.com` mất 4,9 giây cho đúng chuyện ấy.
-    let reached = await docHeight(at);
+    let reached = await untilTall(at, marks, { height, quietMs, mostMs: scrolledMs * 2 });
+    mark(`cao(${reached})`);
     let fed = false;
     for (let pass = 0; pass < 2; pass += 1) {
       swept += await sweep(at);
@@ -600,6 +622,7 @@ export async function shot(chrome, address, {
       // đứng đó cho chúng về.
       await untilStill(marks, { quietMs, mostMs: pass ? Math.round(scrolledMs / 2) : scrolledMs });
       reached = Math.max(reached, await docHeight(at));
+      mark(`luot${pass}(toi ${target}, cao ${reached})`);
       // Đi lượt nữa khi **chưa phủ hết vùng sắp chụp** — không phải khi trang cao lên. Hai chuyện
       // khác nhau: `theguardian.com` cao lên vì dựng muộn nên lượt đầu chỉ cuộn được 800px và
       // phải đi lại; một cái feed cũng cao lên, nhưng nó cao lên **vì** mình vừa cuộn, và đi lại
@@ -622,9 +645,12 @@ export async function shot(chrome, address, {
     // hai màn hình thì vốn là xem trước, và ghi "còn nữa" dưới mỗi tấm là một dòng thừa mỗi lần.
     const truncated = fullPage && tall > MOST_FULL_HEIGHT;
 
+    mark(`khung(${clip.height}px)`);
     const { png, scale } = await fit(at, clip, {
       aim: aimBytes, most: mostBytes, beyond: clip.height > height,
     });
+    mark('chup');
+    if (TRACE) console.log(`${address} · ${marked.join(' · ')}`);
     return { png, title, url, truncated, scale, height: clip.height };
   } finally {
     for (const off of undo) off();
@@ -796,6 +822,58 @@ async function scrollDown(at, marks, step, want, { dwellMs = DWELL_MS, growBy = 
     if (await docHeight(at) > began + growBy) return 'no-roi';
   }
   return 'het';
+}
+
+/**
+ * Đợi trang cao hơn một khung, hoặc tới lúc chắc là nó ngắn thật.
+ *
+ * Một trang cao **đúng bằng khung nhìn** gần như luôn là một trang chưa dựng xong, không phải
+ * một trang ngắn: cái `<html>` rỗng nào cũng cao đúng chừng ấy. `theguardian.com` ở lại trạng
+ * thái đó tới mười tám giây, và `untilReady` vẫn cho qua — vì trong khung nhìn *có* vẽ, nó vẽ
+ * cái khung xương. Chụp lúc ấy ra 11 KB: một khung trắng, và log ghi là thành công.
+ *
+ * Phân biệt bằng `readyState`, không bằng mạng. Đo hai trang cạnh nhau ở giây thứ 2:
+ *
+ * | | readyState | cao | mạng im |
+ * | --- | --- | --- | --- |
+ * | `theguardian.com` (chưa xong) | `loading` | 800 | 241ms |
+ * | `example.com` (ngắn thật) | `complete` | 800 | 1495ms |
+ *
+ * Mạng im không nói được gì — cả hai đều im. `loading` thì nói: trang còn đang đọc dở, và hai
+ * giây sau nó cao 1200, bốn giây sau 11801.
+ */
+export async function untilTall(at, marks, {
+  height = HEIGHT, quietMs = QUIET_MS, mostMs = SCROLLED_MS * 2, tick = 250,
+  now = () => Date.now(), pause = wait, look = pageState,
+} = {}) {
+  const began = now();
+  let seen = await look(at);
+  while (seen.tall <= height) {
+    if (now() - began >= mostMs) break;
+    // Đọc xong rồi mà vẫn một khung, và mạng cũng im: trang ngắn thật, đừng đợi nữa.
+    if (!seen.loading && now() - marks.beat > quietMs) break;
+    await pause(tick);
+    seen = await look(at);
+  }
+  return seen.tall;
+}
+
+/// Chiều cao trang và trang còn đang đọc dở hay không, trong một lượt hỏi.
+export async function pageState(at) {
+  const answer = await at('Runtime.evaluate', {
+    expression: `JSON.stringify({
+      tall: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
+      loading: document.readyState === 'loading',
+    })`,
+    returnByValue: true,
+    timeout: 2000,
+  }).catch(() => null);
+  try {
+    const found = JSON.parse(String(answer?.result?.value ?? '{}'));
+    return { tall: Number(found.tall ?? 0), loading: Boolean(found.loading) };
+  } catch {
+    return { tall: 0, loading: false };
+  }
 }
 
 /// Chiều cao thật của trang **lúc này**. Hỏi lại được, vì nó đổi — xem chỗ gọi trong `shot`.
