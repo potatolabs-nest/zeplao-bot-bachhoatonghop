@@ -133,6 +133,14 @@ export const SCROLLED_MS = Number(process.env.SHOT_SCROLLED_MS ?? 4500);
 export const DWELL_MS = Number(process.env.SHOT_DWELL_MS ?? 400);
 
 /**
+ * Trang được phép tự đẻ ra chừng này trong một lượt cuộn, rồi thôi.
+ *
+ * Một màn hình. Cuộn tới đáy một cái feed là bảo nó nạp tiếp, rồi cái đáy mới lại lùi ra xa —
+ * đuổi theo thì đuổi mãi, và thứ đuổi được thêm cũng chỉ là thêm bài của cùng một cái feed.
+ */
+export const GROW_BY = Number(process.env.SHOT_GROW_BY ?? HEIGHT);
+
+/**
  * Chụp mấy màn hình.
  *
  * Hai, không phải một. Một màn hình đầu của gần như mọi trang bây giờ là logo, thanh điều hướng,
@@ -577,23 +585,28 @@ export async function shot(chrome, address, {
     // "đã cao lên", và mọi trang ngắn đều phải đi thừa cả một lượt cuộn nữa cho một chỗ không
     // có gì. `example.com` mất 4,9 giây cho đúng chuyện ấy.
     let reached = await docHeight(at);
+    let fed = false;
     for (let pass = 0; pass < 2; pass += 1) {
       swept += await sweep(at);
       // Chỉ cuộn tới đáy trang **hiện có**. Cuộn xuống 4800 của một trang cao 800 là mười nấc
       // đi qua chỗ trống, mỗi nấc một vòng hỏi đáp qua socket.
-      await scrollDown(at, marks, height, Math.min(want, Math.max(height, reached)));
+      const target = Math.min(want, Math.max(height, reached));
+      fed = (await scrollDown(at, marks, height, target)) === 'no-roi' || fed;
       // Đợi ở **đáy**, không phải sau khi đã lên lại đầu trang: ảnh vừa được đánh thức thì phải
       // đứng đó cho chúng về.
       await untilStill(marks, { quietMs, mostMs: pass ? Math.round(scrolledMs / 2) : scrolledMs });
-      const now = await docHeight(at);
-      const grew = now > reached + height / 2;
-      reached = Math.max(reached, now);
-      if (!grew || reached >= want) break;
+      reached = Math.max(reached, await docHeight(at));
+      // Đi lượt nữa khi **chưa phủ hết vùng sắp chụp** — không phải khi trang cao lên. Hai chuyện
+      // khác nhau: `theguardian.com` cao lên vì dựng muộn nên lượt đầu chỉ cuộn được 800px và
+      // phải đi lại; một cái feed cũng cao lên, nhưng nó cao lên **vì** mình vừa cuộn, và đi lại
+      // chỉ là cho nó đẻ tiếp. Cái phân biệt là đã đi qua hết chỗ cần chụp hay chưa.
+      if (target >= Math.min(want, reached)) break;
     }
     swept += await sweep(at);
     await scrollHome(at);
     await wait(settleMs);
     if (swept) console.log(`${address}: ẩn ${swept} lớp che`);
+    if (fed) console.log(`${address}: trang tự nạp thêm khi cuộn, đã thôi cho ăn`);
 
     const metrics = await at('Page.getLayoutMetrics');
     const size = metrics.cssContentSize ?? metrics.contentSize ?? { width, height };
@@ -767,12 +780,18 @@ async function sweep(at) {
  * Không tự về đầu trang ở cuối: chỗ gọi còn phải đứng ở đáy đợi mấy tấm ảnh vừa đánh thức về
  * đã, rồi mới lên. Về sớm là hỏi xong rồi bỏ đi trước khi nghe trả lời.
  */
-async function scrollDown(at, marks, step, want, { dwellMs = DWELL_MS } = {}) {
+async function scrollDown(at, marks, step, want, { dwellMs = DWELL_MS, growBy = GROW_BY } = {}) {
   const nudge = Math.max(200, Math.round(step / 2));
+  const began = await docHeight(at);
   for (let y = nudge; y <= want; y += nudge) {
     await at('Runtime.evaluate', { expression: `window.scrollTo(0, ${y})`, timeout: 2000 }).catch(() => {});
     await untilStill(marks, { quietMs: 120, mostMs: dwellMs, tick: 60 });
+    // Trang tự đẻ ra quá một màn hình trong lúc mình đang cuộn thì **thôi cho ăn**. Cuộn tới đáy
+    // một cái feed là bảo nó nạp tiếp, rồi cái đáy mới lại lùi ra xa — đuổi theo thì đuổi mãi,
+    // và thứ đuổi được thêm cũng chỉ là thêm bài của cùng một cái feed.
+    if (await docHeight(at) > began + growBy) return 'no-roi';
   }
+  return 'het';
 }
 
 /// Chiều cao thật của trang **lúc này**. Hỏi lại được, vì nó đổi — xem chỗ gọi trong `shot`.

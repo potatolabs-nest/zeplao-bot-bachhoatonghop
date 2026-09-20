@@ -51,6 +51,26 @@ không có trần thì bot cuộn, trang dài ra, bot cuộn tiếp, và tấm �
 hết bài — tức là không bao giờ. Trang ngắn hơn sáu màn hình thì chụp đúng nó, không đệm thêm
 khoảng trắng: nửa dưới trắng trơn trông y như trang bị lỗi.
 
+### Thôi cho cái feed ăn
+
+Trần ở trên chặn **tấm ảnh**, nhưng không chặn việc bot ngồi cho trang ăn. Cuộn tới đáy một cái
+feed là bảo nó nạp tiếp, rồi cái đáy mới lại lùi ra xa — đuổi theo thì đuổi mãi, và thứ đuổi được
+thêm cũng chỉ là thêm bài của cùng một cái feed.
+
+Nên trong mỗi lượt cuộn, hễ trang tự đẻ ra quá **một màn hình** thì dừng ngay tại đó. Đo trên một
+trang thử tự nạp 1400px mỗi lần cuộn — cùng cho ra một tấm ảnh 4800px:
+
+| | Trang đã nạp | Sự kiện cuộn | Thời gian |
+| --- | --- | --- | --- |
+| Không chặn | **22 lô** — 30.800px | 20 | 8,6s |
+| Có chặn | **5 lô** | 3 | 5,9s |
+
+Và đi lượt cuộn thứ hai hay không thì hỏi **"đã phủ hết chỗ sắp chụp chưa"**, không hỏi "trang có
+cao lên không". Hai chuyện khác nhau, và lúc đầu tôi gộp làm một nên hỏng: `theguardian.com` cao
+lên vì dựng muộn, lượt đầu chỉ cuộn được 800px nên **phải** đi lại; một cái feed cũng cao lên,
+nhưng nó cao lên *vì* mình vừa cuộn, và đi lại chỉ là cho nó đẻ tiếp. Cái phân biệt là đã đi qua
+hết chỗ cần chụp hay chưa.
+
 ### Cuộn chậm, đợi ở đáy, rồi hỏi lại
 
 Ảnh trên gần như mọi trang bây giờ chỉ tải khi trôi qua tầm mắt, mà "tầm mắt" của trang là chỗ
@@ -357,6 +377,7 @@ hoặc `CHROME_URL` trỏ vào một cái ở chỗ khác. Không cần `npm ins
 | `SHOT_AIM_BYTES`, `SHOT_LEAST_SCALE` | Cỡ file nhắm tới (900 KB) và sàn thu nhỏ (0,5). Sàn thắng |
 | `SHOT_SAFE_BYTES` | Trần cho một gói CDP (2,6 MB). Vượt là đứt socket |
 | `SHOT_DWELL_MS`, `SHOT_SCROLLED_MS` | Dừng lâu nhất ở mỗi nấc cuộn (400ms), đợi ảnh về ở đáy (4,5s) |
+| `SHOT_GROW_BY` | Trang được tự đẻ chừng này trong một lượt cuộn rồi thôi (800px) |
 | `SHOT_QUIET_MS`, `SHOT_PAINTED_MS`, `SHOT_BLANK_MS`, `SHOT_LOAD_MS` | Bốn cái mốc ở mục "Chụp lúc nào" (700 · 1500 · 5000 · 15000) |
 | `BACHHOA_ORDERS`, `BACHHOA_WAITING` | Chụp mấy trang một lúc (4), hàng đợi dài nhất (12) |
 | `BACHHOA_SAME_MS` | Cùng link cùng phòng thì bao lâu mới chụp lại. Mặc định 10 phút |
