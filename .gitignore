@@ -2,5 +2,8 @@ node_modules/
 *.log
 .env
 git-connect
+# Token bot. Ai đọc được nó thì người đó *là* bot của bạn — và một token lỡ tay commit
+# thì có xoá khỏi lịch sử cũng đã nằm trong bản clone của người khác rồi.
+key
 .DS_Store
 data/
