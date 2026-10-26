@@ -21,7 +21,7 @@
 # Tách ra thì image này về lại đúng cỡ của một con bot — Node và năm file — và dựng trong vài
 # giây. Chrome thành một container ai cũng có sẵn, dùng chung được cho nhiều bot, và nâng cấp
 # riêng khỏi bot. Cái giá là home-ops phải biết tới hai container thay vì một.
-FROM node:22-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
